@@ -1,78 +1,177 @@
 # MapSnap — Architecture Walkthrough
 
 ## 개요
-지도 위에서 자유롭게 선을 그리면 Naver Directions API를 통해 실제 도로에 스냅하여
-직선화된 경로를 표시하는 Android 앱.
+
+지도 위에서 자유롭게 선을 그리면 T-Map 보행자 API를 통해 실제 도로에 스냅하여
+직선화된 경로를 표시하는 Android 앱.  
+스냅된 결과 경로의 중간 마커를 이동·삭제하거나, 구간을 탭해 삭제하고, 경로를 이어 그릴 수 있다.
 
 ---
 
-## 아키텍처 결정 사항
+## 아키텍처
 
-### 1. Orbit MVI
+### 레이어 구조
+
+```
+presentation/
+  map/          MapState · MapSideEffect · MapViewModel (Orbit MVI)
+  component/    MapScreen · DrawingOverlay · BottomControls
+domain/
+  usecase/      SimplifyPathUseCase · SnapToRoadUseCase
+  repository/   RouteRepository (interface)
+data/
+  repository/   RouteRepositoryImpl
+  remote/       TmapService (Retrofit) · dto/TmapRequest · TmapResponse
+di/             NetworkModule · AppModule (Hilt)
+```
+
+### MVI 패턴 (Orbit)
+
 - `MapViewModel`이 `ContainerHost<MapState, MapSideEffect>` 구현
 - `reduce { }` 블록은 순수 상태 변환만 수행
-- 모든 네트워크·CPU 작업은 `intent { }` + `withContext(Dispatchers.IO/Default)` 처리
+- 모든 네트워크·CPU 작업은 `intent { }` + `withContext(Dispatchers.IO/Default)` 위임
 
-### 2. 그리기 오버레이 좌표 처리
-- `DrawingOverlay`는 NaverMap 위의 전체 화면 Canvas
-- 터치 이벤트: `detectDragGestures`로 `Offset` (px) 수집
-- LatLng 변환: `NaverMap.projection.fromScreenLocation(PointF)` 사용
-- 시각적 렌더링: 로컬 `screenPoints` 리스트 (좌표 변환 불필요)
-- 지도 제스처: 그리기 모드 진입 시 `MapUiSettings`로 비활성화
+---
 
-### 3. 경로 스냅 알고리즘
-1. **RDP 단순화** (`SimplifyPathUseCase`, Dispatchers.Default)
-   - epsilon ≈ 0.000135° (~15m)
-   - 노이즈 제거 및 중복 포인트 정리
-2. **균등 샘플링** (`SnapToRoadUseCase`)
-   - start + goal + 중간 최대 3개 웨이포인트
-   - Naver Directions 5 API 제한 (max 5 waypoints) 준수
-3. **API 호출** (`RouteRepositoryImpl`, Dispatchers.IO) — **보행로(pedestrian) 스냅**
-   - OSRM 공개 서버 사용: `GET https://router.project-osrm.org/route/v1/foot/{lng,lat;...}?overview=full&geometries=geojson`
-   - 보행자 프로파일(`foot`)로 인도·횡단보도·보행로 포함 경로 반환
-   - API 키 불필요, 무료
-   - 그린 경로를 충실히 따르도록 최대 25개 웨이포인트 전달 (OSRM은 다수 경유지 지원)
-   - 응답: `routes[0].geometry.coordinates` (GeoJSON, [lng,lat]) → `List<LatLng>`
-   - **Naver Directions는 차도(driving) 전용 + 경유지 5개 제한이라 보행로 요구사항에 부적합 → OSRM으로 전환**
+## DrawingMode 상태 전이
 
-### 4. API 키 관리 (지도 SDK 전용 — 신규 NCP 인증)
-- `local.properties`: `NAVER_CLIENT_ID` (지도 SDK용. OSRM은 키 불필요)
-- `BuildConfig` + `manifestPlaceholders`로 주입
-- Manifest meta-data: `com.naver.maps.map.NCP_KEY_ID` (신규 NCP 방식)
-- `App.kt`에서 `NaverMapSdk.NcpKeyClient` 설정
-- map-sdk **3.23.2** (구 3.19.1은 신규 키 미지원)
+```
+IDLE ──[그리기 버튼]──► DRAWING ──[손가락 뗌/스냅 버튼]──► PROCESSING ──► DONE
+ ▲                                                                          │
+ └──────────────────────[지우기 버튼 / onClearDrawing]─────────────────────┘
+ 
+DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
+```
 
-### 5. 현재 위치
+---
+
+## 경로 스냅 파이프라인
+
+### 입력 처리 (SnapToRoadUseCase)
+
+```
+손그림 raw points
+    │
+    ▼ [1] SimplifyPathUseCase.invoke(points, EPSILON_DRAWN_DEG=0.000135°, ~15m)
+    │     Ramer-Douglas-Peucker · cosLat 보정으로 경도 비등방성 제거
+    │
+    ▼ [2] sampleByArcLength(simplified, maxWaypoints=19)
+    │     Haversine 기반 아크-길이 균등 샘플링 (코너 밀집 구간 과탈락 방지)
+    │     → T-Map API 청크 3회(chunkSize=7) 수준으로 제한
+    │
+    ▼ [3] RouteRepositoryImpl.getPedestrianRoute(waypoints)
+    │     청크 분할(start+경유지5+end=7포인트) → T-Map 병렬 아닌 순차 호출
+    │     청크 경계 끝 20m 트리밍 → 루프 아티팩트 방지
+    │
+    ▼ [4] SimplifyPathUseCase.invoke(route, EPSILON_ROUTE_DEG=0.000072°, ~8m)
+          T-Map 결과 미세 곡선 제거, 교차로·꺾임 보존
+```
+
+### 파라미터 트레이드오프
+
+| 파라미터 | 현재값 | 낮추면 | 높이면 |
+|----------|--------|--------|--------|
+| `maxWaypoints` | 19 | 경로 더 직선적, 청크↓ | 그린 선 밀착, 청크↑ |
+| `EPSILON_DRAWN_DEG` | 0.000135° | 손 떨림 과보존 | 코너 손실 |
+| `EPSILON_ROUTE_DEG` | 0.000072° | 도로 곡선 과보존 | 교차로 누락 위험 |
+| `CHUNK_TRIM_METERS` | 20m | 루프 아티팩트 잔존 위험 | 청크 경계 경로 단절 |
+| 마커 샘플 간격 | 30m | 마커 밀집 | 마커 희소 |
+
+---
+
+## DrawingOverlay 렌더링
+
+| DrawingMode | 렌더링 내용 |
+|-------------|------------|
+| `DRAWING` | 손그림 원본 (파란 곡선) + 시작점 스냅존 원(초록) |
+| `PROCESSING` | RDP 직선화 선분 (주황, 루프면 초록) + waypoint 점 |
+| `DONE` / `IDLE` | 오버레이 비표시 (PathOverlay가 담당) |
+
+---
+
+## 루프(Loop) 자동 연결
+
+- 시작점·끝점 거리 ≤ `LOOP_CLOSE_THRESHOLD_M` (30m) 시 자동 연결
+- 손그림 마지막에 시작점 재추가 → T-Map이 닫힌 경로 생성
+- 이어 그리기 중에는 루프 감지 비활성화
+
+---
+
+## 결과 경로 편집
+
+### 중간 마커
+
+- 스냅 완료 후 `sampleMarkers(route, 30m)`로 자동 생성
+- 마커 탭 → 선택(주황)
+- 선택 중 지도 탭 → 해당 위치로 마커 이동 → `rerouteWithMarkers()` 자동 호출
+- 재라우팅: `SnapToRoadUseCase.fromWaypoints([routeStart] + routeMarkers + [routeEnd])`
+  - RDP·샘플링 없이 정제된 waypoints를 T-Map에 직접 전달
+
+### 구간 선택 삭제
+
+- `segmentize(snappedRoute, routeMarkers)` → 마커 위치 기준으로 경로 분할
+- 각 구간 별도 `PathOverlay` (탭 가능)
+- 구간 탭 → 주황 하이라이트 + AlertDialog("구간 삭제")
+- 삭제 확인 → 경계 마커(`markers[min(segIdx, markers.lastIndex)]`) 제거 → 재라우팅
+
+---
+
+## 이어 그리기
+
+- DONE 상태에서 `+` 버튼 → `isContinuing = true`, DRAWING 진입
+- 기존 `snappedRoute` / `routeStart` / `routeEnd` / `routeMarkers` 유지
+- 새 드로잉 스냅 시: `[snappedRoute.last()] + drawnPoints` 로 연결
+- 스냅 성공: `existingRoute + newRoute.drop(1)` 연결 후 마커 재샘플링
+
+---
+
+## T-Map API
+
+- Endpoint: `POST https://apis.openapi.sk.com/tmap/routes/pedestrian`
+- 인증: `appKey` 헤더
+- `searchOption = "0"` (추천 경로) — passList 제약과 함께 선 추종 안정성↑
+- `reqCoordType / resCoordType = "WGS84GEO"`
+- 청크당 경유지 최대 5개 → 7포인트씩 분할 처리
+- API 키: `local.properties`의 `TMAP_API_KEY` → `BuildConfig.TMAP_API_KEY`
+
+---
+
+## 지도 SDK (Naver Maps)
+
+- SDK 버전: `3.23.2` (신규 NCP 키 방식 필수)
+- 인증: `NaverMapSdk.NcpKeyClient` (`App.kt`)
+- Manifest meta-data: `com.naver.maps.map.NCP_KEY_ID`
+- `local.properties`: `NAVER_CLIENT_ID`
+
+---
+
+## 위치 권한
+
 - `FusedLocationProviderClient.lastLocation`
 - `ActivityResultContracts.RequestPermission`으로 권한 요청
 - 권한 거부 또는 위치 불가 시 서울 시청 (37.5666, 126.9784) 폴백
 
-### 6. 좌표 변환 (DrawingOverlay)
-- NaverMap SDK 인스턴스에 의존하지 않고, `CameraPositionState`의 카메라 정보로
-  **Web Mercator(EPSG:3857) 수식을 직접 계산**해 화면 픽셀 ↔ LatLng 변환
-- 그리기 모드일 때만 `pointerInput` 조건부 설치 → 비그리기 모드에서 지도 줌/스크롤 통과
+---
+
+## 파일 목록
+
+| 파일 | 역할 |
+|------|------|
+| `SimplifyPathUseCase` | RDP 알고리즘, cosLat 보정, epsilon 파라미터 노출 |
+| `SnapToRoadUseCase` | 입력 RDP → 샘플링 → API → 출력 RDP 파이프라인, `fromWaypoints()` |
+| `RouteRepositoryImpl` | T-Map 청크 분할 호출, 경계 트리밍, 중복 좌표 제거 |
+| `MapState` | DrawingMode, drawnPoints, simplifiedPoints, snappedRoute, routeMarkers, 선택 상태 등 |
+| `MapViewModel` | 모든 인텐트, sampleMarkers, rerouteWithMarkers, isContinuing 분기 |
+| `DrawingOverlay` | Canvas 기반 손그림 · 직선화 오버레이, 스냅존 원 |
+| `MapScreen` | NaverMap Compose, segmentize, PathOverlay/Marker 렌더링, AlertDialog |
+| `BottomControls` | 그리기 / 스냅 / 이어 그리기 / 지우기 FAB |
 
 ---
 
-## 파일 구조 요약
+## Git 히스토리
 
-```
-di/             → Hilt 모듈 (NetworkModule, AppModule)
-data/           → Retrofit service, DTO, RepositoryImpl
-domain/         → Repository interface, UseCase (SimplifyPath, SnapToRoad)
-presentation/
-  map/          → MapState, MapSideEffect, MapViewModel
-  component/    → MapScreen, DrawingOverlay, BottomControls
-ui/theme/       → MapSnapTheme
-```
-
----
-
-## Naver Cloud Platform 설정 가이드
-
-1. https://console.ncloud.com 접속 및 로그인
-2. **AI·NAVER API** → **Maps** 메뉴
-3. **Mobile Dynamic Map** 이용 신청 (Android 지도 SDK)
-4. **Directions** 이용 신청 (경로 API)
-5. 애플리케이션 등록 → **Client ID**, **Client Secret** 발급
-6. `local.properties`에 키 입력 후 Gradle Sync
+| 커밋 | 내용 |
+|------|------|
+| `73bfb7e` | 초기 커밋 — T-Map 스냅, RDP, 루프 연결, 마커 편집 전체 구현 |
+| `a75f758` | feat: 기존 경로에 이어 그리기 기능 추가 |
+| `bf80454` | feat: 구간 탭으로 삭제 기능 추가 |
