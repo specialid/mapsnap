@@ -1,0 +1,3 @@
+-keep class com.jason.mapsnap.data.remote.dto.** { *; }
+-keepattributes Signature
+-keepattributes *Annotation*
