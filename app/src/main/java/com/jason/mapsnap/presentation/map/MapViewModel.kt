@@ -40,19 +40,35 @@ class MapViewModel @Inject constructor(
     fun onDrawToggle() = intent {
         when (state.drawingMode) {
             DrawingMode.IDLE, DrawingMode.DONE -> {
+                // 완전 초기화 후 새로 그리기
                 reduce {
                     state.copy(
                         drawingMode = DrawingMode.DRAWING,
+                        isContinuing = false,
                         drawnPoints = emptyList(),
-                        snappedRoute = emptyList()
+                        snappedRoute = emptyList(),
+                        routeMarkers = emptyList(),
+                        routeStart = null,
+                        routeEnd = null
                     )
                 }
             }
-            DrawingMode.DRAWING -> {
-                // 그리기 모드에서 다시 누르면 현재까지 그린 것으로 스냅 시도
-                snapCurrentPath()
-            }
+            DrawingMode.DRAWING -> snapCurrentPath()
             DrawingMode.PROCESSING -> { /* 처리 중 무시 */ }
+        }
+    }
+
+    /** 기존 경로 끝에 이어서 그리기 — snappedRoute 유지, isContinuing = true */
+    fun onContinueDrawing() = intent {
+        if (state.drawingMode != DrawingMode.DONE) return@intent
+        reduce {
+            state.copy(
+                drawingMode = DrawingMode.DRAWING,
+                isContinuing = true,
+                drawnPoints = emptyList(),
+                simplifiedPoints = emptyList()
+                // snappedRoute / routeMarkers / routeStart / routeEnd 유지
+            )
         }
     }
 
@@ -82,6 +98,7 @@ class MapViewModel @Inject constructor(
                 drawnPoints = emptyList(),
                 simplifiedPoints = emptyList(),
                 isLoop = false,
+                isContinuing = false,
                 snappedRoute = emptyList(),
                 routeMarkers = emptyList(),
                 selectedMarkerIndex = -1,
@@ -176,15 +193,23 @@ class MapViewModel @Inject constructor(
 
     private fun snapCurrentPath() = intent {
         val raw = state.drawnPoints
-        Log.d("SnapDebug", "snapCurrentPath: points.size=${raw.size}")
+        Log.d("SnapDebug", "snapCurrentPath: points.size=${raw.size}, continuing=${state.isContinuing}")
         if (raw.size < 2) {
-            reduce { state.copy(drawingMode = DrawingMode.IDLE) }
+            reduce { state.copy(drawingMode = if (state.isContinuing) DrawingMode.DONE else DrawingMode.IDLE) }
             return@intent
         }
 
+        // 이어 그리기: 기존 경로 끝점을 첫 웨이포인트로 연결
+        val basePoints = if (state.isContinuing && state.snappedRoute.isNotEmpty()) {
+            listOf(state.snappedRoute.last()) + raw
+        } else {
+            raw
+        }
+
         // 시작점·끝점이 LOOP_CLOSE_THRESHOLD_M 이내면 시작점을 끝에 추가해 경로를 닫음
-        val isLoop = haversineMeters(raw.first(), raw.last()) <= LOOP_CLOSE_THRESHOLD_M
-        val points = if (isLoop) raw + raw.first() else raw
+        val isLoop = !state.isContinuing &&
+                haversineMeters(basePoints.first(), basePoints.last()) <= LOOP_CLOSE_THRESHOLD_M
+        val points = if (isLoop) basePoints + basePoints.first() else basePoints
 
         // 1단계: RDP 직선화 → 즉시 오버레이에 반영하여 사용자에게 피드백
         val simplified = withContext(Dispatchers.Default) { simplifyPath(points) }
@@ -203,18 +228,27 @@ class MapViewModel @Inject constructor(
         Log.d("SnapDebug", "snapToRoad result: isSuccess=${result.isSuccess}, error=${result.exceptionOrNull()?.message}")
 
         result.fold(
-            onSuccess = { route ->
-                Log.d("SnapDebug", "route size=${route.size}, first=${route.firstOrNull()}")
-                val markers = sampleMarkers(route, intervalMeters = 30.0)
+            onSuccess = { newRoute ->
+                Log.d("SnapDebug", "route size=${newRoute.size}, continuing=${state.isContinuing}")
+
+                // 이어 그리기: 기존 경로 뒤에 새 구간 연결 (연결점 중복 제거)
+                val combined = if (state.isContinuing && state.snappedRoute.isNotEmpty()) {
+                    state.snappedRoute + newRoute.drop(1)
+                } else {
+                    newRoute
+                }
+
+                val markers = sampleMarkers(combined, intervalMeters = 30.0)
                 reduce {
                     state.copy(
                         drawingMode = DrawingMode.DONE,
-                        snappedRoute = route,
+                        isContinuing = false,
+                        snappedRoute = combined,
                         simplifiedPoints = emptyList(),
                         routeMarkers = markers,
                         selectedMarkerIndex = -1,
-                        routeStart = route.first(),
-                        routeEnd = route.last(),
+                        routeStart = combined.first(),
+                        routeEnd = combined.last(),
                         isProcessing = false,
                         error = null
                     )
@@ -224,7 +258,8 @@ class MapViewModel @Inject constructor(
                 Log.e("SnapDebug", "snapToRoad FAILED: ${e.message}", e)
                 reduce {
                     state.copy(
-                        drawingMode = DrawingMode.DONE,
+                        drawingMode = if (state.isContinuing) DrawingMode.DONE else DrawingMode.DONE,
+                        isContinuing = false,
                         isProcessing = false,
                         error = e.message
                     )

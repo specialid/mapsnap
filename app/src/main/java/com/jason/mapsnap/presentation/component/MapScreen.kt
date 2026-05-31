@@ -186,6 +186,7 @@ fun MapScreen(
         BottomControls(
             drawingMode = state.drawingMode,
             onDrawToggle = viewModel::onDrawToggle,
+            onContinue = viewModel::onContinueDrawing,
             onClear = viewModel::onClearDrawing,
             modifier = Modifier.align(Alignment.BottomCenter)
         )

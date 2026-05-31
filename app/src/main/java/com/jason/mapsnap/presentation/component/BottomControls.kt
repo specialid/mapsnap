@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,6 +31,7 @@ import com.jason.mapsnap.presentation.map.DrawingMode
 fun BottomControls(
     drawingMode: DrawingMode,
     onDrawToggle: () -> Unit,
+    onContinue: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -54,6 +56,20 @@ fun BottomControls(
 
         Spacer(modifier = Modifier.weight(1f))
 
+        // 이어 그리기 버튼 (DONE 상태일 때만 표시)
+        AnimatedVisibility(
+            visible = drawingMode == DrawingMode.DONE,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            FloatingActionButton(
+                onClick = onContinue,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = "이어 그리기")
+            }
+        }
+
         // 그리기/완료/처리중 버튼
         when (drawingMode) {
             DrawingMode.PROCESSING -> {
@@ -75,14 +91,10 @@ fun BottomControls(
                     onClick = onDrawToggle,
                     icon = { Icon(Icons.Default.Edit, contentDescription = null) },
                     text = {
-                        Text(
-                            if (drawingMode == DrawingMode.DONE) "다시 그리기" else "그리기"
-                        )
+                        Text(if (drawingMode == DrawingMode.DONE) "다시 그리기" else "그리기")
                     }
                 )
             }
         }
-
-        Spacer(modifier = Modifier.width(0.dp))
     }
 }
