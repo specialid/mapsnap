@@ -102,6 +102,8 @@ class MapViewModel @Inject constructor(
                 snappedRoute = emptyList(),
                 routeMarkers = emptyList(),
                 selectedMarkerIndex = -1,
+                selectedSegmentIndex = -1,
+                showDeleteSegmentDialog = false,
                 routeStart = null,
                 routeEnd = null,
                 error = null
@@ -109,15 +111,48 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    /** 마커 탭: 미선택 → 선택 / 이미 선택된 마커 탭 → 삭제 후 재라우팅 */
+    /** 마커 탭: 미선택 → 선택 / 선택 중 재탭 → 해제 */
     fun onMarkerTapped(index: Int) = intent {
-        if (state.selectedMarkerIndex == index) {
-            val updated = state.routeMarkers.toMutableList().also { it.removeAt(index) }
-            reduce { state.copy(routeMarkers = updated, selectedMarkerIndex = -1) }
-            rerouteWithMarkers()
-        } else {
-            reduce { state.copy(selectedMarkerIndex = index) }
+        val next = if (state.selectedMarkerIndex == index) -1 else index
+        reduce { state.copy(selectedMarkerIndex = next) }
+    }
+
+    /** 구간 탭 → 삭제 확인 다이얼로그 표시 */
+    fun onSegmentTapped(index: Int) = intent {
+        reduce {
+            state.copy(
+                selectedSegmentIndex = index,
+                showDeleteSegmentDialog = true,
+                selectedMarkerIndex = -1   // 마커 선택 해제
+            )
         }
+    }
+
+    /** 구간 삭제 확인: 해당 구간의 경계 마커를 제거하고 재라우팅 */
+    fun onDeleteSegmentConfirmed() = intent {
+        val segIdx = state.selectedSegmentIndex
+        val markers = state.routeMarkers
+        if (segIdx < 0 || markers.isEmpty()) {
+            reduce { state.copy(selectedSegmentIndex = -1, showDeleteSegmentDialog = false) }
+            return@intent
+        }
+        // seg[0] → markers[0] 제거
+        // seg[i] → markers[i] 제거 (마지막 구간이면 markers.last())
+        val markerIdx = segIdx.coerceAtMost(markers.lastIndex)
+        val updated = markers.toMutableList().also { it.removeAt(markerIdx) }
+        reduce {
+            state.copy(
+                routeMarkers = updated,
+                selectedSegmentIndex = -1,
+                showDeleteSegmentDialog = false
+            )
+        }
+        rerouteWithMarkers()
+    }
+
+    /** 구간 삭제 취소 */
+    fun onDeleteSegmentDismissed() = intent {
+        reduce { state.copy(selectedSegmentIndex = -1, showDeleteSegmentDialog = false) }
     }
 
     /** 지도 탭: 선택된 마커가 있으면 해당 위치로 이동 후 재라우팅 */

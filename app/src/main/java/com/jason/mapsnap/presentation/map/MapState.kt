@@ -13,6 +13,8 @@ data class MapState(
     val isContinuing: Boolean = false,            // 기존 경로에 이어 그리는 중
     val routeMarkers: List<LatLng> = emptyList(), // 결과 경로 위 편집 가능한 중간 마커
     val selectedMarkerIndex: Int = -1,            // -1 = 선택 없음
+    val selectedSegmentIndex: Int = -1,           // 탭된 구간 인덱스 (-1 = 없음)
+    val showDeleteSegmentDialog: Boolean = false,
     val routeStart: LatLng? = null,               // 마커 재라우팅 시 고정 시작점
     val routeEnd: LatLng? = null,                 // 마커 재라우팅 시 고정 끝점
     val currentLocation: LatLng? = null,
