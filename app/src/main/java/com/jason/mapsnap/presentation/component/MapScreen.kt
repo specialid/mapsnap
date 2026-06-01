@@ -35,11 +35,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.key
-import com.naver.maps.map.compose.Marker
 import com.naver.maps.map.compose.PathOverlay
 import com.naver.maps.map.compose.rememberCameraPositionState
-import com.naver.maps.map.compose.rememberMarkerState
-import com.naver.maps.map.overlay.OverlayImage
 import org.orbitmvi.orbit.compose.collectAsState
 import org.orbitmvi.orbit.compose.collectSideEffect
 
@@ -70,26 +67,6 @@ private fun segmentize(route: List<LatLng>, markers: List<LatLng>): List<List<La
     return segments.filter { it.size >= 2 }
 }
 
-/** 마커 아이콘: 선택 여부에 따라 주황(선택) / 흰색(기본) 원형 비트맵 */
-private fun markerIcon(selected: Boolean): OverlayImage {
-    val size = 40
-    val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(bitmap)
-    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-
-    // 채우기
-    paint.style = android.graphics.Paint.Style.FILL
-    paint.color = if (selected) 0xFFE65100.toInt() else 0xFFFFFFFF.toInt()
-    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 4f, paint)
-
-    // 테두리
-    paint.style = android.graphics.Paint.Style.STROKE
-    paint.strokeWidth = 4f
-    paint.color = if (selected) 0xFFBF360C.toInt() else 0xFF1565C0.toInt()
-    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 4f, paint)
-
-    return OverlayImage.fromBitmap(bitmap)
-}
 
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalNaverMapApi::class)
@@ -160,13 +137,7 @@ fun MapScreen(
                 isTiltGesturesEnabled = !isDrawing,
                 isLocationButtonEnabled = !isDrawing
             ),
-            onMapClick = { _, latLng ->
-                if (state.selectedMarkerIndex >= 0) {
-                    viewModel.onMapTapped(latLng)   // 선택 중 → 해당 위치로 마커 이동
-                } else {
-                    viewModel.onMarkerDeselect()
-                }
-            }
+            onMapClick = { _, _ -> viewModel.onMarkerDeselect() }
         ) {
             MapEffect(Unit) { map ->
                 naverMap = map
@@ -195,32 +166,20 @@ fun MapScreen(
                 }
             }
 
-            // 중간 마커: 탭 → 선택(주황), 선택 중 지도 탭 → 이동
-            state.routeMarkers.forEachIndexed { index, pos ->
-                val isSelected = state.selectedMarkerIndex == index
-                key(pos) {
-                    val markerState = rememberMarkerState(position = pos)
-                    Marker(
-                        state = markerState,
-                        icon = markerIcon(selected = isSelected),
-                        onClick = {
-                            viewModel.onMarkerTapped(index)
-                            true
-                        }
-                    )
-                }
-            }
+            // 마커는 DrawingOverlay Canvas에서 렌더링 + 드래그 처리
         }
 
         DrawingOverlay(
             drawingMode = state.drawingMode,
             simplifiedPoints = state.simplifiedPoints,
             isLoop = state.isLoop,
+            routeMarkers = state.routeMarkers,
             cameraPositionState = cameraPositionState,
             naverMap = naverMap,
             onDrawStart = viewModel::onDrawStart,
             onDrawPoint = viewModel::onDrawPoint,
             onDrawEnd = viewModel::onDrawEnd,
+            onMarkerDragEnd = viewModel::onMarkerDragEnd,
             modifier = Modifier.fillMaxSize()
         )
 

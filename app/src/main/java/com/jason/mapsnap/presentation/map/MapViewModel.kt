@@ -172,13 +172,17 @@ class MapViewModel @Inject constructor(
         reduce { state.copy(selectedSegmentIndex = -1, showDeleteSegmentDialog = false) }
     }
 
-    /** 지도 탭: 선택된 마커를 해당 위치로 이동 후 해당 구간만 재탐색 */
+    /** 마커 드래그 완료: 위치 업데이트 후 해당 구간만 재탐색 */
+    fun onMarkerDragEnd(index: Int, newPos: LatLng) = intent {
+        if (index < 0 || index >= state.routeMarkers.size) return@intent
+        val updated = state.routeMarkers.toMutableList().also { it[index] = newPos }
+        reduce { state.copy(routeMarkers = updated) }
+        _rerouteSignal.emit(PartialRerouteEvent.MarkerMoved(index, newPos))
+    }
+
+    /** 지도 탭: 선택 해제 */
     fun onMapTapped(latLng: LatLng) = intent {
-        val idx = state.selectedMarkerIndex
-        if (idx < 0 || idx >= state.routeMarkers.size) return@intent
-        val updated = state.routeMarkers.toMutableList().also { it[idx] = latLng }
-        reduce { state.copy(routeMarkers = updated, selectedMarkerIndex = -1) }
-        _rerouteSignal.emit(PartialRerouteEvent.MarkerMoved(idx, latLng))
+        reduce { state.copy(selectedMarkerIndex = -1) }
     }
 
     /** 선택 해제 */
