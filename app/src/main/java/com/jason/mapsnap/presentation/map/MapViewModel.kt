@@ -2,11 +2,16 @@ package com.jason.mapsnap.presentation.map
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.jason.mapsnap.domain.usecase.SimplifyPathUseCase
 import com.jason.mapsnap.domain.usecase.SnapToRoadUseCase
 import com.naver.maps.geometry.LatLng
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.orbitmvi.orbit.ContainerHost
 import org.orbitmvi.orbit.viewmodel.container
@@ -25,8 +30,22 @@ class MapViewModel @Inject constructor(
     override val container = container<MapState, MapSideEffect>(MapState())
 
     companion object {
-        /** 시작점과 끝점이 이 거리(미터) 이내면 루프로 자동 연결 */
         const val LOOP_CLOSE_THRESHOLD_M = 30.0
+        private const val REROUTE_DEBOUNCE_MS = 300L
+    }
+
+    // 편집 이벤트를 300ms debounce로 병합 — 빠른 연속 탭 시 마지막 1회만 API 호출
+    private val _rerouteSignal = MutableSharedFlow<PartialRerouteEvent>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+
+    init {
+        viewModelScope.launch {
+            _rerouteSignal.debounce(REROUTE_DEBOUNCE_MS).collect { event ->
+                handlePartialReroute(event)
+            }
+        }
     }
 
     fun onLocationPermissionResult(granted: Boolean) {
@@ -128,7 +147,7 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    /** 구간 삭제 확인: 해당 구간의 경계 마커를 제거하고 재라우팅 */
+    /** 구간 삭제 확인: 경계 마커를 제거하고 앞뒤 경계 사이 구간만 재탐색 */
     fun onDeleteSegmentConfirmed() = intent {
         val segIdx = state.selectedSegmentIndex
         val markers = state.routeMarkers
@@ -136,8 +155,6 @@ class MapViewModel @Inject constructor(
             reduce { state.copy(selectedSegmentIndex = -1, showDeleteSegmentDialog = false) }
             return@intent
         }
-        // seg[0] → markers[0] 제거
-        // seg[i] → markers[i] 제거 (마지막 구간이면 markers.last())
         val markerIdx = segIdx.coerceAtMost(markers.lastIndex)
         val updated = markers.toMutableList().also { it.removeAt(markerIdx) }
         reduce {
@@ -147,7 +164,7 @@ class MapViewModel @Inject constructor(
                 showDeleteSegmentDialog = false
             )
         }
-        rerouteWithMarkers()
+        _rerouteSignal.emit(PartialRerouteEvent.MarkerRemoved(markerIdx))
     }
 
     /** 구간 삭제 취소 */
@@ -155,13 +172,13 @@ class MapViewModel @Inject constructor(
         reduce { state.copy(selectedSegmentIndex = -1, showDeleteSegmentDialog = false) }
     }
 
-    /** 지도 탭: 선택된 마커가 있으면 해당 위치로 이동 후 재라우팅 */
+    /** 지도 탭: 선택된 마커를 해당 위치로 이동 후 해당 구간만 재탐색 */
     fun onMapTapped(latLng: LatLng) = intent {
         val idx = state.selectedMarkerIndex
         if (idx < 0 || idx >= state.routeMarkers.size) return@intent
         val updated = state.routeMarkers.toMutableList().also { it[idx] = latLng }
         reduce { state.copy(routeMarkers = updated, selectedMarkerIndex = -1) }
-        rerouteWithMarkers()
+        _rerouteSignal.emit(PartialRerouteEvent.MarkerMoved(idx, latLng))
     }
 
     /** 선택 해제 */
@@ -169,35 +186,77 @@ class MapViewModel @Inject constructor(
         reduce { state.copy(selectedMarkerIndex = -1) }
     }
 
-    /** 편집된 마커 목록으로 T-Map 재라우팅 */
-    private fun rerouteWithMarkers() = intent {
-        val start = state.routeStart ?: return@intent
-        val end   = state.routeEnd   ?: return@intent
-        val waypoints = listOf(start) + state.routeMarkers + listOf(end)
+    /**
+     * 국소 재라우팅 처리: 변경된 마커 앞뒤 구간만 T-Map 1회 호출로 재탐색.
+     * debounce를 통해 호출되므로 연속 편집 시 마지막 이벤트만 실행.
+     */
+    private fun handlePartialReroute(event: PartialRerouteEvent) = intent {
+        val route   = state.snappedRoute
+        val markers = state.routeMarkers
+        val start   = state.routeStart ?: return@intent
+        val end     = state.routeEnd   ?: return@intent
+        if (route.size < 2) return@intent
+
+        // 이벤트 종류에 따라 경계점 및 waypoints 결정
+        val (prevBoundary, nextBoundary, waypoints) = when (event) {
+            is PartialRerouteEvent.MarkerMoved -> {
+                val idx = event.idx
+                val prev = if (idx == 0) start else markers.getOrNull(idx - 1) ?: start
+                val next = if (idx >= markers.lastIndex) end else markers.getOrNull(idx + 1) ?: end
+                Triple(prev, next, listOf(prev, event.newPos, next))
+            }
+            is PartialRerouteEvent.MarkerRemoved -> {
+                val idx = event.markerIdx
+                // 삭제 후 갱신된 markers 기준: idx 위치의 앞뒤
+                val prev = if (idx == 0) start else markers.getOrNull(idx - 1) ?: start
+                val next = markers.getOrNull(idx) ?: end   // 삭제 후 idx에 있는 것이 다음 마커
+                Triple(prev, next, listOf(prev, next))
+            }
+        }
 
         reduce { state.copy(isProcessing = true) }
+        Log.d("SnapDebug", "partialReroute: ${waypoints.size} waypoints")
 
         val result = withContext(Dispatchers.IO) { snapToRoad.fromWaypoints(waypoints) }
 
         result.fold(
-            onSuccess = { route ->
+            onSuccess = { subRoute ->
+                val newRoute = spliceRoute(route, prevBoundary, nextBoundary, subRoute)
+                val newMarkers = sampleMarkers(newRoute, intervalMeters = 30.0)
                 reduce {
                     state.copy(
-                        snappedRoute = route,
-                        routeMarkers = sampleMarkers(route, intervalMeters = 30.0),
+                        snappedRoute = newRoute,
+                        routeMarkers = newMarkers,
                         selectedMarkerIndex = -1,
-                        routeStart = route.first(),
-                        routeEnd = route.last(),
                         isProcessing = false,
                         error = null
                     )
                 }
             },
             onFailure = { e ->
+                Log.e("SnapDebug", "partialReroute FAILED: ${e.message}", e)
                 reduce { state.copy(isProcessing = false, error = e.message) }
                 postSideEffect(MapSideEffect.ShowToast(e.message ?: "경로 재탐색에 실패했습니다"))
             }
         )
+    }
+
+    /**
+     * snappedRoute 에서 fromPt~toPt 구간을 replacement 로 교체.
+     * indexOf 로 경계점을 찾아 그 사이를 잘라내고 새 sub-route 를 삽입.
+     * 경계점을 찾지 못하면 원본 경로 그대로 반환.
+     */
+    private fun spliceRoute(
+        full: List<LatLng>,
+        fromPt: LatLng,
+        toPt: LatLng,
+        replacement: List<LatLng>
+    ): List<LatLng> {
+        val fromIdx = full.indexOfFirst { it == fromPt }
+        val toIdx   = full.indexOfFirst { it == toPt }
+        if (fromIdx < 0 || toIdx < 0 || fromIdx >= toIdx) return full
+        // full[0..fromIdx-1] + replacement + full[toIdx+1..end]
+        return full.subList(0, fromIdx) + replacement + full.subList(toIdx + 1, full.size)
     }
 
     /** 경로에서 [intervalMeters] 간격으로 중간 마커 좌표 추출 (시작·끝 제외) */
@@ -305,4 +364,12 @@ class MapViewModel @Inject constructor(
             }
         )
     }
+}
+
+/** 국소 재라우팅 이벤트 — debounce Flow 를 통해 handlePartialReroute 에 전달 */
+sealed class PartialRerouteEvent {
+    /** i번째 마커가 newPos 로 이동 */
+    data class MarkerMoved(val idx: Int, val newPos: LatLng) : PartialRerouteEvent()
+    /** markerIdx 번째 마커가 삭제됨 (삭제 후 routeMarkers 기준 인덱스) */
+    data class MarkerRemoved(val markerIdx: Int)             : PartialRerouteEvent()
 }
