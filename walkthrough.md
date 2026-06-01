@@ -101,11 +101,15 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 
 ### 중간 마커
 
-- 스냅 완료 후 `sampleMarkers(route, 30m)`로 자동 생성
-- 마커 탭 → 선택(주황)
-- 선택 중 지도 탭 → 해당 위치로 마커 이동 → `rerouteWithMarkers()` 자동 호출
-- 재라우팅: `SnapToRoadUseCase.fromWaypoints([routeStart] + routeMarkers + [routeEnd])`
-  - RDP·샘플링 없이 정제된 waypoints를 T-Map에 직접 전달
+- 스냅 완료 후 `sampleMarkers(route, 80m)`로 최초 자동 생성 (기존 30m에서 80m로 늘려 조절 포인트 과다 생성 방지)
+- 마커 탭 → 선택(주황 표시)
+- **드래그 앤 드롭 이동(Drag-to-Move)**: 
+  - 선택된 마커 위에 Compose 오버레이를 통해 큰 터치 대상 영역(`64dp`)을 가진 드래그 핸들을 배치하여 가시성 및 터치 조작성을 대폭 강화합니다. (마커 지름은 80px로 2배 확대)
+  - 사용자가 드래그를 진행할 때 Compose의 `detectDragGestures` 및 지도 `Projection`을 연동해 실시간 좌표를 추출하고 뷰모델 상태를 갱신합니다.
+- **T-Map 호출 최적화 (Debounce)**: 
+  - 드래그 동작이 멈춘 후 **300ms 디바운스** 딜레이 뒤에 최종 1회의 국소 재라우팅(`handlePartialReroute`) API만 호출되도록 이벤트를 결합(debounce)합니다.
+- **포인트 증식 및 위치 변동 방지**:
+  - 재라우팅 완료 시 기존 마커 목록을 전체 재생성하지 않고 **기존 리스트를 보존한 채 드래그하여 움직인 마커 1개만 신규 경로 상의 가장 가까운 지점으로 보정 스냅** 처리합니다. 이로 인해 마커 개수가 절대 증식하지 않고 다른 마커들이 원래 위치를 온전히 유지합니다.
 
 ### 구간 선택 삭제
 

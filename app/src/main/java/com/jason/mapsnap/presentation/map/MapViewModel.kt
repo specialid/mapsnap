@@ -32,6 +32,7 @@ class MapViewModel @Inject constructor(
     companion object {
         const val LOOP_CLOSE_THRESHOLD_M = 30.0
         private const val REROUTE_DEBOUNCE_MS = 300L
+        private const val DEFAULT_INTERVAL_METERS = 80.0
     }
 
     // 편집 이벤트를 300ms debounce로 병합 — 빠른 연속 탭 시 마지막 1회만 API 호출
@@ -136,6 +137,15 @@ class MapViewModel @Inject constructor(
         reduce { state.copy(selectedMarkerIndex = next) }
     }
 
+    /** 마커 드래그 시 마커 위치 갱신 및 국소 재라우팅 신호 전송 */
+    fun onMarkerDragged(index: Int, latLng: LatLng) = intent {
+        val markers = state.routeMarkers
+        if (index < 0 || index >= markers.size) return@intent
+        val updated = markers.toMutableList().also { it[index] = latLng }
+        reduce { state.copy(routeMarkers = updated) }
+        _rerouteSignal.emit(PartialRerouteEvent.MarkerMoved(index, latLng))
+    }
+
     /** 구간 탭 → 삭제 확인 다이얼로그 표시 */
     fun onSegmentTapped(index: Int) = intent {
         reduce {
@@ -222,11 +232,33 @@ class MapViewModel @Inject constructor(
         result.fold(
             onSuccess = { subRoute ->
                 val newRoute = spliceRoute(route, prevBoundary, nextBoundary, subRoute)
-                val newMarkers = sampleMarkers(newRoute, intervalMeters = 30.0)
                 reduce {
+                    val currentMarkers = state.routeMarkers
+                    val newMarkers = when (event) {
+                        is PartialRerouteEvent.MarkerMoved -> {
+                            val snappedPos = subRoute.minByOrNull { haversineMeters(it, event.newPos) } ?: event.newPos
+                            currentMarkers.toMutableList().also {
+                                if (event.idx in it.indices) {
+                                    it[event.idx] = snappedPos
+                                }
+                                // 인접 마커도 Tmap API가 반환한 subRoute의 양끝점으로 스냅 업데이트
+                                if (event.idx > 0 && event.idx - 1 in it.indices) {
+                                    it[event.idx - 1] = subRoute.first()
+                                }
+                                if (event.idx < it.lastIndex && event.idx + 1 in it.indices) {
+                                    it[event.idx + 1] = subRoute.last()
+                                }
+                            }
+                        }
+                        is PartialRerouteEvent.MarkerRemoved -> {
+                            currentMarkers
+                        }
+                    }
                     state.copy(
                         snappedRoute = newRoute,
                         routeMarkers = newMarkers,
+                        routeStart = newRoute.firstOrNull() ?: state.routeStart,
+                        routeEnd = newRoute.lastOrNull() ?: state.routeEnd,
                         selectedMarkerIndex = -1,
                         isProcessing = false,
                         error = null
@@ -246,14 +278,27 @@ class MapViewModel @Inject constructor(
      * indexOf 로 경계점을 찾아 그 사이를 잘라내고 새 sub-route 를 삽입.
      * 경계점을 찾지 못하면 원본 경로 그대로 반환.
      */
+    private fun indexOfClosest(list: List<LatLng>, point: LatLng): Int {
+        var minDistance = Double.MAX_VALUE
+        var minIdx = -1
+        for (i in list.indices) {
+            val dist = haversineMeters(list[i], point)
+            if (dist < minDistance) {
+                minDistance = dist
+                minIdx = i
+            }
+        }
+        return minIdx
+    }
+
     private fun spliceRoute(
         full: List<LatLng>,
         fromPt: LatLng,
         toPt: LatLng,
         replacement: List<LatLng>
     ): List<LatLng> {
-        val fromIdx = full.indexOfFirst { it == fromPt }
-        val toIdx   = full.indexOfFirst { it == toPt }
+        val fromIdx = indexOfClosest(full, fromPt)
+        val toIdx   = indexOfClosest(full, toPt)
         if (fromIdx < 0 || toIdx < 0 || fromIdx >= toIdx) return full
         // full[0..fromIdx-1] + replacement + full[toIdx+1..end]
         return full.subList(0, fromIdx) + replacement + full.subList(toIdx + 1, full.size)
@@ -332,7 +377,7 @@ class MapViewModel @Inject constructor(
                     newRoute
                 }
 
-                val markers = sampleMarkers(combined, intervalMeters = 30.0)
+                val markers = sampleMarkers(combined, intervalMeters = DEFAULT_INTERVAL_METERS)
                 reduce {
                     state.copy(
                         drawingMode = DrawingMode.DONE,

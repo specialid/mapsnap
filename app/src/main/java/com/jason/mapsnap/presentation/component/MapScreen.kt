@@ -7,15 +7,26 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import android.graphics.PointF
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -35,7 +46,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.key
-import com.naver.maps.map.compose.Marker
+import com.naver.maps.map.compose.Marker as NaverMarker
 import com.naver.maps.map.compose.PathOverlay
 import com.naver.maps.map.compose.rememberCameraPositionState
 import com.naver.maps.map.compose.rememberMarkerState
@@ -72,7 +83,7 @@ private fun segmentize(route: List<LatLng>, markers: List<LatLng>): List<List<La
 
 /** 마커 아이콘: 선택 여부에 따라 주황(선택) / 흰색(기본) 원형 비트맵 */
 private fun markerIcon(selected: Boolean): OverlayImage {
-    val size = 40
+    val size = 80
     val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
     val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
@@ -80,16 +91,18 @@ private fun markerIcon(selected: Boolean): OverlayImage {
     // 채우기
     paint.style = android.graphics.Paint.Style.FILL
     paint.color = if (selected) 0xFFE65100.toInt() else 0xFFFFFFFF.toInt()
-    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 4f, paint)
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 6f, paint)
 
     // 테두리
     paint.style = android.graphics.Paint.Style.STROKE
-    paint.strokeWidth = 4f
+    paint.strokeWidth = 6f
     paint.color = if (selected) 0xFFBF360C.toInt() else 0xFF1565C0.toInt()
-    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 4f, paint)
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 6f, paint)
 
     return OverlayImage.fromBitmap(bitmap)
 }
+
+
 
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalNaverMapApi::class)
@@ -160,12 +173,8 @@ fun MapScreen(
                 isTiltGesturesEnabled = !isDrawing,
                 isLocationButtonEnabled = !isDrawing
             ),
-            onMapClick = { _, latLng ->
-                if (state.selectedMarkerIndex >= 0) {
-                    viewModel.onMapTapped(latLng)   // 선택 중 → 해당 위치로 마커 이동
-                } else {
-                    viewModel.onMarkerDeselect()
-                }
+            onMapClick = { _, _ ->
+                viewModel.onMarkerDeselect()
             }
         ) {
             MapEffect(Unit) { map ->
@@ -195,14 +204,18 @@ fun MapScreen(
                 }
             }
 
-            // 중간 마커: 탭 → 선택(주황), 선택 중 지도 탭 → 이동
+            // 중간 마커: 탭 → 선택(주황)
             state.routeMarkers.forEachIndexed { index, pos ->
                 val isSelected = state.selectedMarkerIndex == index
-                key(pos) {
+                key(index) {
                     val markerState = rememberMarkerState(position = pos)
-                    Marker(
+                    LaunchedEffect(pos) {
+                        markerState.position = pos
+                    }
+                    NaverMarker(
                         state = markerState,
                         icon = markerIcon(selected = isSelected),
+                        anchor = Offset(0.5f, 0.5f),
                         onClick = {
                             viewModel.onMarkerTapped(index)
                             true
@@ -223,6 +236,62 @@ fun MapScreen(
             onDrawEnd = viewModel::onDrawEnd,
             modifier = Modifier.fillMaxSize()
         )
+
+        // 드래그 가능한 중간 조절점 오버레이 (선택 시 드래그 이동 제공)
+        val selectedIndex = state.selectedMarkerIndex
+        if (selectedIndex in state.routeMarkers.indices) {
+            val markerPos = state.routeMarkers[selectedIndex]
+            val currentMarkerPosState = rememberUpdatedState(markerPos) // 최신 마커 위치 캡처용 State
+            val cameraPosition = cameraPositionState.position // 카메라 움직임 시 리컴포지션 유도
+            naverMap?.let { map ->
+                val projection = map.projection
+                val screenPoint = projection.toScreenLocation(markerPos)
+                val density = LocalContext.current.resources.displayMetrics.density
+                
+                // 더 큰 터치 조절점 크기 정의 (터치 영역 64dp, 시각 조절점 32dp)
+                val touchSizeDp = 64.dp
+                val touchSizePx = 64f * density
+                
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                (screenPoint.x - touchSizePx / 2).toInt(),
+                                (screenPoint.y - touchSizePx / 2).toInt()
+                            )
+                        }
+                        .size(touchSizeDp)
+                        .pointerInput(selectedIndex) {
+                            var accumulatedDrag: PointF? = null
+                            detectDragGestures(
+                                onDragStart = { _ ->
+                                    val startPos = currentMarkerPosState.value
+                                    val startScreenPoint = projection.toScreenLocation(startPos)
+                                    accumulatedDrag = PointF(startScreenPoint.x, startScreenPoint.y)
+                                },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    accumulatedDrag?.let { drag ->
+                                        drag.x += dragAmount.x
+                                        drag.y += dragAmount.y
+                                        val newLatLng = projection.fromScreenLocation(drag)
+                                        viewModel.onMarkerDragged(selectedIndex, newLatLng)
+                                    }
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    // 시각 마커 (선택된 마커와 매칭되는 32dp 오렌지 원형 조절판)
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(Color(0xFFE65100), shape = CircleShape)
+                            .border(3.dp, Color(0xFFBF360C), shape = CircleShape)
+                    )
+                }
+            }
+        }
 
         BottomControls(
             drawingMode = state.drawingMode,
