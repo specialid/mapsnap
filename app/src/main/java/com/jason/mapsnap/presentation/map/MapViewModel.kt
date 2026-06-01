@@ -2,17 +2,22 @@ package com.jason.mapsnap.presentation.map
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.jason.mapsnap.domain.usecase.SimplifyPathUseCase
 import com.jason.mapsnap.domain.usecase.SnapToRoadUseCase
 import com.naver.maps.geometry.LatLng
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.orbitmvi.orbit.ContainerHost
 import org.orbitmvi.orbit.viewmodel.container
 import javax.inject.Inject
 import kotlin.math.asin
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -25,9 +30,14 @@ class MapViewModel @Inject constructor(
     override val container = container<MapState, MapSideEffect>(MapState())
 
     companion object {
-        /** 시작점과 끝점이 이 거리(미터) 이내면 루프로 자동 연결 */
         const val LOOP_CLOSE_THRESHOLD_M = 30.0
+        /** 재라우팅 debounce: 연속 편집 후 마지막 동작에서만 API 호출 */
+        private const val REROUTE_DEBOUNCE_MS = 400L
+        /** 재라우팅 최대 중간 마커 수 — routeStart(1) + markers + routeEnd(1) ≤ 19 */
+        private const val MAX_REROUTE_MARKERS = 17
     }
+
+    private var rerouteJob: Job? = null
 
     fun onLocationPermissionResult(granted: Boolean) {
         if (!granted) intent { reduce { state.copy(currentLocation = null) } }
@@ -147,7 +157,7 @@ class MapViewModel @Inject constructor(
                 showDeleteSegmentDialog = false
             )
         }
-        rerouteWithMarkers()
+        scheduleReroute()
     }
 
     /** 구간 삭제 취소 */
@@ -161,7 +171,7 @@ class MapViewModel @Inject constructor(
         if (idx < 0 || idx >= state.routeMarkers.size) return@intent
         val updated = state.routeMarkers.toMutableList().also { it[idx] = latLng }
         reduce { state.copy(routeMarkers = updated, selectedMarkerIndex = -1) }
-        rerouteWithMarkers()
+        scheduleReroute()
     }
 
     /** 선택 해제 */
@@ -169,11 +179,39 @@ class MapViewModel @Inject constructor(
         reduce { state.copy(selectedMarkerIndex = -1) }
     }
 
+    /**
+     * 디바운스된 재라우팅 예약.
+     * 이전 예약을 취소하고 [REROUTE_DEBOUNCE_MS]ms 후 실제 API 호출.
+     * 연속 편집(마커 이동·구간 삭제 반복) 시 마지막 동작에서만 T-Map 호출.
+     */
+    private fun scheduleReroute() {
+        rerouteJob?.cancel()
+        rerouteJob = viewModelScope.launch {
+            delay(REROUTE_DEBOUNCE_MS)
+            rerouteWithMarkers()
+        }
+    }
+
+    /**
+     * 마커를 최대 [MAX_REROUTE_MARKERS]개로 균등 서브샘플링.
+     * 마커는 이미 30m 간격으로 균등 배치되어 있으므로 인덱스 기반 샘플링으로 충분.
+     */
+    private fun subsampleMarkers(markers: List<LatLng>, max: Int): List<LatLng> {
+        if (markers.size <= max) return markers
+        val step = (markers.size - 1).toDouble() / (max - 1)
+        return (0 until max).map { i ->
+            markers[(i * step).roundToInt().coerceAtMost(markers.lastIndex)]
+        }
+    }
+
     /** 편집된 마커 목록으로 T-Map 재라우팅 */
     private fun rerouteWithMarkers() = intent {
         val start = state.routeStart ?: return@intent
         val end   = state.routeEnd   ?: return@intent
-        val waypoints = listOf(start) + state.routeMarkers + listOf(end)
+
+        // 마커가 많으면 서브샘플링 → API 호출 수 상한 유지 (초기 스냅과 동일 수준)
+        val sampledMarkers = subsampleMarkers(state.routeMarkers, MAX_REROUTE_MARKERS)
+        val waypoints = listOf(start) + sampledMarkers + listOf(end)
 
         reduce { state.copy(isProcessing = true) }
 
