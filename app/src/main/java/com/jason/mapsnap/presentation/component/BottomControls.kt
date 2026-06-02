@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -31,6 +32,8 @@ import com.jason.mapsnap.presentation.map.DrawingMode
 @Composable
 fun BottomControls(
     drawingMode: DrawingMode,
+    hasPendingEdits: Boolean,
+    onApplyEdits: () -> Unit,
     onDrawToggle: () -> Unit,
     onContinue: () -> Unit,
     onClear: () -> Unit,
@@ -69,6 +72,20 @@ fun BottomControls(
                 icon = { Icon(imageVector = Icons.Default.Share, contentDescription = null) },
                 text = { Text("GPX") },
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            )
+        }
+
+        // 적용 버튼 (DONE 상태이고 펜딩 수정사항이 있을 때만 표시)
+        AnimatedVisibility(
+            visible = drawingMode == DrawingMode.DONE && hasPendingEdits,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            ExtendedFloatingActionButton(
+                onClick = onApplyEdits,
+                icon = { Icon(imageVector = Icons.Default.Refresh, contentDescription = null) },
+                text = { Text("적용") },
+                containerColor = MaterialTheme.colorScheme.primaryContainer
             )
         }
 

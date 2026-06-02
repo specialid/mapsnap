@@ -133,13 +133,25 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 ### 구간 선택 삭제
 
 - `segmentize(snappedRoute, routeMarkers)` → 마커 위치 기준으로 경로 분할
-- 각 구간 별도 `PathOverlay` (탭 가능)
+- 各 구간 별도 `PathOverlay` (탭 가능)
 - 구간 탭 → 주황 하이라이트 + AlertDialog("구간 삭제")
 - 삭제 확인 → 경계 마커(`markers[min(segIdx, markers.lastIndex)]`) 제거 → 재라우팅
+
+### 로컬 업데이트 및 일괄 적용 (Apply Edits)
+
+- **로컬 즉시 반영 및 API 지연 호출**:
+  - 기존의 마커 드래그, 시작/끝 마커 드래그, 마커/세그먼트 삭제 시 실시간으로 API를 호출하던 디바운스 방식(`_rerouteSignal`)을 제거했습니다.
+  - 대신 편집이 일어날 때마다 `spliceRoute` 함수를 사용하여 로컬에서 `snappedRoute`와 마커 좌표만 즉시 업데이트하여 끊김 없는 드래그/편집 경험을 제공합니다.
+  - 편집 발생 시 `hasPendingEdits` 상태를 `true`로 설정합니다.
+- **배치 재라우팅 (Batch Rerouting)**:
+  - `DrawingMode.DONE` 상태에서 `hasPendingEdits`가 `true`일 때 하단 컨트롤러에 **적용** 버튼(`ExtendedFloatingActionButton`, `Icons.Default.Refresh`)이 동적으로 표시됩니다.
+  - 사용자가 **적용** 버튼을 누르면 `onApplyEdits()`가 호출되어 출발지, 중간 마커들, 목적지를 통합한 전체 웨이포인트를 구성하고, `snapToRoad.fromWaypoints()` API를 통해 전체 경로에 대해 일괄적으로 도로 스냅 재탐색을 실행합니다.
+  - 재탐색 성공 시 새로운 스냅 경로로 상태를 업데이트하고 중간 마커들을 재샘플링한 후 `hasPendingEdits`를 `false`로 재설정합니다.
 
 ---
 
 ## 이어 그리기
+
 
 - DONE 상태에서 `+` 버튼 → `isContinuing = true`, DRAWING 진입
 - 기존 `snappedRoute` / `routeStart` / `routeEnd` / `routeMarkers` 유지
@@ -248,4 +260,5 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `f3a1d9c` | feat: T-Map API 호출 횟수 최적화 (동적 샘플링, 드래그 중복 제거, 마커 삭제 우회) |
 | `bcca9af` | feat: T-Map API 호출 최적화 및 중간 마커 순서 식별성 UX 개선 |
 | `8ff0213` | feat: 중간 마커 직접 삭제 및 T-Map 국소 재라우팅 연동 기능 추가 |
+| `26783b2` | feat: 로컬 경로 업데이트 및 배치 재라우팅 (Apply edits) 일괄 적용 기능 구현 |
 

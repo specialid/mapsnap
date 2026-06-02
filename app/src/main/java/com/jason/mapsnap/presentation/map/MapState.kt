@@ -22,7 +22,8 @@ data class MapState(
     val isProcessing: Boolean = false,
     val error: String? = null,
     val tmapApiCallCount: Int = 0,
-    val naverMapApiCallCount: Int = 0
+    val naverMapApiCallCount: Int = 0,
+    val hasPendingEdits: Boolean = false
 )
 
 enum class DrawingMode { IDLE, DRAWING, PROCESSING, DONE }

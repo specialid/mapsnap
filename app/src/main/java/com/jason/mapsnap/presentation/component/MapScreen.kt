@@ -518,6 +518,8 @@ fun MapScreen(
 
         BottomControls(
             drawingMode = state.drawingMode,
+            hasPendingEdits = state.hasPendingEdits,
+            onApplyEdits = viewModel::onApplyEdits,
             onDrawToggle = viewModel::onDrawToggle,
             onContinue = viewModel::onContinueDrawing,
             onClear = viewModel::onClearDrawing,
