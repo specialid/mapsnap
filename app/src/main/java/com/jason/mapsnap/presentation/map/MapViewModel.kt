@@ -137,6 +137,16 @@ class MapViewModel @Inject constructor(
         reduce { state.copy(selectedMarkerIndex = next) }
     }
 
+    fun onStartMarkerTapped() = intent {
+        val next = if (state.selectedMarkerIndex == -2) -1 else -2
+        reduce { state.copy(selectedMarkerIndex = next) }
+    }
+
+    fun onEndMarkerTapped() = intent {
+        val next = if (state.selectedMarkerIndex == -3) -1 else -3
+        reduce { state.copy(selectedMarkerIndex = next) }
+    }
+
     /** 마커 드래그 시 마커 위치 갱신 및 국소 재라우팅 신호 전송 */
     fun onMarkerDragged(index: Int, latLng: LatLng) = intent {
         val markers = state.routeMarkers
@@ -144,6 +154,16 @@ class MapViewModel @Inject constructor(
         val updated = markers.toMutableList().also { it[index] = latLng }
         reduce { state.copy(routeMarkers = updated) }
         _rerouteSignal.emit(PartialRerouteEvent.MarkerMoved(index, latLng))
+    }
+
+    fun onStartMarkerDragged(latLng: LatLng) = intent {
+        reduce { state.copy(routeStart = latLng) }
+        _rerouteSignal.emit(PartialRerouteEvent.StartMoved(latLng))
+    }
+
+    fun onEndMarkerDragged(latLng: LatLng) = intent {
+        reduce { state.copy(routeEnd = latLng) }
+        _rerouteSignal.emit(PartialRerouteEvent.EndMoved(latLng))
     }
 
     /** 구간 탭 → 삭제 확인 다이얼로그 표시 */
@@ -185,10 +205,22 @@ class MapViewModel @Inject constructor(
     /** 지도 탭: 선택된 마커를 해당 위치로 이동 후 해당 구간만 재탐색 */
     fun onMapTapped(latLng: LatLng) = intent {
         val idx = state.selectedMarkerIndex
-        if (idx < 0 || idx >= state.routeMarkers.size) return@intent
-        val updated = state.routeMarkers.toMutableList().also { it[idx] = latLng }
-        reduce { state.copy(routeMarkers = updated, selectedMarkerIndex = -1) }
-        _rerouteSignal.emit(PartialRerouteEvent.MarkerMoved(idx, latLng))
+        when (idx) {
+            -2 -> {
+                reduce { state.copy(routeStart = latLng, selectedMarkerIndex = -1) }
+                _rerouteSignal.emit(PartialRerouteEvent.StartMoved(latLng))
+            }
+            -3 -> {
+                reduce { state.copy(routeEnd = latLng, selectedMarkerIndex = -1) }
+                _rerouteSignal.emit(PartialRerouteEvent.EndMoved(latLng))
+            }
+            else -> {
+                if (idx < 0 || idx >= state.routeMarkers.size) return@intent
+                val updated = state.routeMarkers.toMutableList().also { it[idx] = latLng }
+                reduce { state.copy(routeMarkers = updated, selectedMarkerIndex = -1) }
+                _rerouteSignal.emit(PartialRerouteEvent.MarkerMoved(idx, latLng))
+            }
+        }
     }
 
     /** 선택 해제 */
@@ -203,8 +235,8 @@ class MapViewModel @Inject constructor(
     private fun handlePartialReroute(event: PartialRerouteEvent) = intent {
         val route   = state.snappedRoute
         val markers = state.routeMarkers
-        val start   = state.routeStart ?: return@intent
-        val end     = state.routeEnd   ?: return@intent
+        val start   = route.firstOrNull() ?: return@intent
+        val end     = route.lastOrNull() ?: return@intent
         if (route.size < 2) return@intent
 
         // 이벤트 종류에 따라 경계점 및 waypoints 결정
@@ -221,6 +253,14 @@ class MapViewModel @Inject constructor(
                 val prev = if (idx == 0) start else markers.getOrNull(idx - 1) ?: start
                 val next = markers.getOrNull(idx) ?: end   // 삭제 후 idx에 있는 것이 다음 마커
                 Triple(prev, next, listOf(prev, next))
+            }
+            is PartialRerouteEvent.StartMoved -> {
+                val next = markers.firstOrNull() ?: end
+                Triple(start, next, listOf(event.newPos, next))
+            }
+            is PartialRerouteEvent.EndMoved -> {
+                val prev = markers.lastOrNull() ?: start
+                Triple(prev, end, listOf(prev, event.newPos))
             }
         }
 
@@ -253,12 +293,26 @@ class MapViewModel @Inject constructor(
                         is PartialRerouteEvent.MarkerRemoved -> {
                             currentMarkers
                         }
+                        is PartialRerouteEvent.StartMoved -> {
+                            currentMarkers.toMutableList().also {
+                                if (it.isNotEmpty()) {
+                                    it[0] = subRoute.last()
+                                }
+                            }
+                        }
+                        is PartialRerouteEvent.EndMoved -> {
+                            currentMarkers.toMutableList().also {
+                                if (it.isNotEmpty()) {
+                                    it[it.lastIndex] = subRoute.first()
+                                }
+                            }
+                        }
                     }
                     state.copy(
                         snappedRoute = newRoute,
                         routeMarkers = newMarkers,
-                        routeStart = newRoute.firstOrNull() ?: state.routeStart,
-                        routeEnd = newRoute.lastOrNull() ?: state.routeEnd,
+                        routeStart = if (event is PartialRerouteEvent.StartMoved) subRoute.first() else (newRoute.firstOrNull() ?: state.routeStart),
+                        routeEnd = if (event is PartialRerouteEvent.EndMoved) subRoute.last() else (newRoute.lastOrNull() ?: state.routeEnd),
                         selectedMarkerIndex = -1,
                         isProcessing = false,
                         error = null
@@ -417,4 +471,8 @@ sealed class PartialRerouteEvent {
     data class MarkerMoved(val idx: Int, val newPos: LatLng) : PartialRerouteEvent()
     /** markerIdx 번째 마커가 삭제됨 (삭제 후 routeMarkers 기준 인덱스) */
     data class MarkerRemoved(val markerIdx: Int)             : PartialRerouteEvent()
+    /** 출발지가 newPos 로 이동 */
+    data class StartMoved(val newPos: LatLng)                 : PartialRerouteEvent()
+    /** 도착지가 newPos 로 이동 */
+    data class EndMoved(val newPos: LatLng)                   : PartialRerouteEvent()
 }

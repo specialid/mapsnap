@@ -81,23 +81,68 @@ private fun segmentize(route: List<LatLng>, markers: List<LatLng>): List<List<La
     return segments.filter { it.size >= 2 }
 }
 
-/** 마커 아이콘: 선택 여부에 따라 주황(선택) / 흰색(기본) 원형 비트맵 */
-private fun markerIcon(selected: Boolean): OverlayImage {
+enum class MarkerType { START, END, INTERMEDIATE }
+
+/** 마커 아이콘: 타입 및 선택 여부에 따라 원형 비트맵(글자 포함) 생성 */
+private fun markerIcon(type: MarkerType, selected: Boolean): OverlayImage {
     val size = 80
     val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
     val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
 
+    // 색상 결정
+    val (bgColor, strokeColor) = when (type) {
+        MarkerType.START -> {
+            if (selected) {
+                0xFFE65100.toInt() to 0xFFBF360C.toInt()
+            } else {
+                0xFF4CAF50.toInt() to 0xFF2E7D32.toInt() // Green
+            }
+        }
+        MarkerType.END -> {
+            if (selected) {
+                0xFFE65100.toInt() to 0xFFBF360C.toInt()
+            } else {
+                0xFFF44336.toInt() to 0xFFC62828.toInt() // Red
+            }
+        }
+        MarkerType.INTERMEDIATE -> {
+            if (selected) {
+                0xFFE65100.toInt() to 0xFFBF360C.toInt()
+            } else {
+                0xFFFFFFFF.toInt() to 0xFF1565C0.toInt() // White & Blue
+            }
+        }
+    }
+
     // 채우기
     paint.style = android.graphics.Paint.Style.FILL
-    paint.color = if (selected) 0xFFE65100.toInt() else 0xFFFFFFFF.toInt()
+    paint.color = bgColor
     canvas.drawCircle(size / 2f, size / 2f, size / 2f - 6f, paint)
 
     // 테두리
     paint.style = android.graphics.Paint.Style.STROKE
     paint.strokeWidth = 6f
-    paint.color = if (selected) 0xFFBF360C.toInt() else 0xFF1565C0.toInt()
+    paint.color = strokeColor
     canvas.drawCircle(size / 2f, size / 2f, size / 2f - 6f, paint)
+
+    // 텍스트 그리기
+    val text = when (type) {
+        MarkerType.START -> "S"
+        MarkerType.END -> "G"
+        MarkerType.INTERMEDIATE -> null
+    }
+
+    if (text != null) {
+        paint.style = android.graphics.Paint.Style.FILL
+        paint.color = 0xFFFFFFFF.toInt()
+        paint.textSize = 40f
+        paint.textAlign = android.graphics.Paint.Align.CENTER
+        paint.isFakeBoldText = true
+        val textHeight = paint.descent() - paint.ascent()
+        val textOffset = textHeight / 2 - paint.descent()
+        canvas.drawText(text, size / 2f, size / 2f + textOffset, paint)
+    }
 
     return OverlayImage.fromBitmap(bitmap)
 }
@@ -204,6 +249,46 @@ fun MapScreen(
                 }
             }
 
+            // 출발 마커 (S)
+            state.routeStart?.let { pos ->
+                val isSelected = state.selectedMarkerIndex == -2
+                key("start_marker") {
+                    val markerState = rememberMarkerState(position = pos)
+                    LaunchedEffect(pos) {
+                        markerState.position = pos
+                    }
+                    NaverMarker(
+                        state = markerState,
+                        icon = markerIcon(MarkerType.START, isSelected),
+                        anchor = Offset(0.5f, 0.5f),
+                        onClick = {
+                            viewModel.onStartMarkerTapped()
+                            true
+                        }
+                    )
+                }
+            }
+
+            // 도착 마커 (G)
+            state.routeEnd?.let { pos ->
+                val isSelected = state.selectedMarkerIndex == -3
+                key("end_marker") {
+                    val markerState = rememberMarkerState(position = pos)
+                    LaunchedEffect(pos) {
+                        markerState.position = pos
+                    }
+                    NaverMarker(
+                        state = markerState,
+                        icon = markerIcon(MarkerType.END, isSelected),
+                        anchor = Offset(0.5f, 0.5f),
+                        onClick = {
+                            viewModel.onEndMarkerTapped()
+                            true
+                        }
+                    )
+                }
+            }
+
             // 중간 마커: 탭 → 선택(주황)
             state.routeMarkers.forEachIndexed { index, pos ->
                 val isSelected = state.selectedMarkerIndex == index
@@ -214,7 +299,7 @@ fun MapScreen(
                     }
                     NaverMarker(
                         state = markerState,
-                        icon = markerIcon(selected = isSelected),
+                        icon = markerIcon(MarkerType.INTERMEDIATE, selected = isSelected),
                         anchor = Offset(0.5f, 0.5f),
                         onClick = {
                             viewModel.onMarkerTapped(index)
@@ -237,10 +322,15 @@ fun MapScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // 드래그 가능한 중간 조절점 오버레이 (선택 시 드래그 이동 제공)
+        // 드래그 가능한 조절점 오버레이 (선택 시 드래그 이동 제공 - 출발, 도착 및 중간 마커 대응)
         val selectedIndex = state.selectedMarkerIndex
-        if (selectedIndex in state.routeMarkers.indices) {
-            val markerPos = state.routeMarkers[selectedIndex]
+        val markerPos = when (selectedIndex) {
+            -2 -> state.routeStart
+            -3 -> state.routeEnd
+            in state.routeMarkers.indices -> state.routeMarkers[selectedIndex]
+            else -> null
+        }
+        if (markerPos != null) {
             val currentMarkerPosState = rememberUpdatedState(markerPos) // 최신 마커 위치 캡처용 State
             val cameraPosition = cameraPositionState.position // 카메라 움직임 시 리컴포지션 유도
             naverMap?.let { map ->
@@ -269,13 +359,18 @@ fun MapScreen(
                                     val startScreenPoint = projection.toScreenLocation(startPos)
                                     accumulatedDrag = PointF(startScreenPoint.x, startScreenPoint.y)
                                 },
+                                
                                 onDrag = { change, dragAmount ->
                                     change.consume()
                                     accumulatedDrag?.let { drag ->
                                         drag.x += dragAmount.x
                                         drag.y += dragAmount.y
                                         val newLatLng = projection.fromScreenLocation(drag)
-                                        viewModel.onMarkerDragged(selectedIndex, newLatLng)
+                                        when (selectedIndex) {
+                                            -2 -> viewModel.onStartMarkerDragged(newLatLng)
+                                            -3 -> viewModel.onEndMarkerDragged(newLatLng)
+                                            else -> viewModel.onMarkerDragged(selectedIndex, newLatLng)
+                                        }
                                     }
                                 }
                             )
