@@ -1,8 +1,11 @@
 package com.jason.mapsnap.presentation.map
 
+import android.content.ContentResolver
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.jason.mapsnap.domain.usecase.ExportGpxUseCase
 import com.jason.mapsnap.domain.usecase.SimplifyPathUseCase
 import com.jason.mapsnap.domain.usecase.SnapToRoadUseCase
 import com.naver.maps.geometry.LatLng
@@ -24,7 +27,8 @@ import kotlin.math.sqrt
 @HiltViewModel
 class MapViewModel @Inject constructor(
     private val snapToRoad: SnapToRoadUseCase,
-    private val simplifyPath: SimplifyPathUseCase
+    private val simplifyPath: SimplifyPathUseCase,
+    private val exportGpx: ExportGpxUseCase
 ) : ViewModel(), ContainerHost<MapState, MapSideEffect> {
 
     override val container = container<MapState, MapSideEffect>(MapState())
@@ -51,6 +55,25 @@ class MapViewModel @Inject constructor(
 
     fun onLocationPermissionResult(granted: Boolean) {
         if (!granted) intent { reduce { state.copy(currentLocation = null) } }
+    }
+
+    fun onGpxUriSelected(uri: Uri, contentResolver: ContentResolver) = intent {
+        reduce { state.copy(isProcessing = true) }
+        try {
+            val gpxString = exportGpx(state.snappedRoute)
+            withContext(Dispatchers.IO) {
+                contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    outputStream.write(gpxString.toByteArray(Charsets.UTF_8))
+                    outputStream.flush()
+                } ?: throw Exception("Failed to open output stream for GPX export")
+            }
+            reduce { state.copy(isProcessing = false) }
+            postSideEffect(MapSideEffect.ShowToast("GPX 파일이 성공적으로 저장되었습니다"))
+        } catch (e: Exception) {
+            Log.e("MapViewModel", "Failed to export GPX: ${e.message}", e)
+            reduce { state.copy(isProcessing = false) }
+            postSideEffect(MapSideEffect.ShowToast(e.message ?: "GPX 파일 저장에 실패했습니다"))
+        }
     }
 
     fun onLocationReceived(latLng: LatLng) = intent {

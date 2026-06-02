@@ -183,6 +183,14 @@ fun MapScreen(
         }
     }
 
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/gpx+xml")
+    ) { uri ->
+        if (uri != null) {
+            viewModel.onGpxUriSelected(uri, context.contentResolver)
+        }
+    }
+
     LaunchedEffect(Unit) {
         locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
     }
@@ -393,6 +401,7 @@ fun MapScreen(
             onDrawToggle = viewModel::onDrawToggle,
             onContinue = viewModel::onContinueDrawing,
             onClear = viewModel::onClearDrawing,
+            onExportGpx = { createDocumentLauncher.launch("mapsnap_route.gpx") },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
@@ -33,6 +34,7 @@ fun BottomControls(
     onDrawToggle: () -> Unit,
     onContinue: () -> Unit,
     onClear: () -> Unit,
+    onExportGpx: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -55,6 +57,20 @@ fun BottomControls(
         }
 
         Spacer(modifier = Modifier.weight(1f))
+
+        // GPX 내보내기 버튼 (DONE 상태일 때만 표시)
+        AnimatedVisibility(
+            visible = drawingMode == DrawingMode.DONE,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            ExtendedFloatingActionButton(
+                onClick = onExportGpx,
+                icon = { Icon(imageVector = Icons.Default.Share, contentDescription = null) },
+                text = { Text("GPX") },
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            )
+        }
 
         // 이어 그리기 버튼 (DONE 상태일 때만 표시)
         AnimatedVisibility(

@@ -167,18 +167,37 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 
 ---
 
+## GPX 내보내기 기능 (GPX Export)
+
+- **GPX 1.1 XML 생성 (`ExportGpxUseCase`)**:
+  - `snappedRoute` 리스트의 좌표(`LatLng`)들을 GPX 1.1 규격에 맞게 `<trkpt>` 태그로 변환합니다.
+  - 성능 최적화를 위해 내부적으로 `StringBuilder`를 사용하여 빠르게 XML 문자열을 조립합니다.
+  - 루트 이름에 특수 문자가 들어갈 수 있으므로 XML 이스케이프 문자 처리를 수행합니다.
+- **Android CreateDocument SAF 연동 (`MapScreen`)**:
+  - Compose의 `rememberLauncherForActivityResult`와 `ActivityResultContracts.CreateDocument`를 이용하여 사용자가 직접 저장 경로와 파일 이름을 선택할 수 있는 시스템 저장 대화상자를 제공합니다 (`mapsnap_route.gpx`).
+- **비동기 IO 쓰기 및 MVI 예외 처리 (`MapViewModel`)**:
+  - URI 선택 시 백전환 디스패처(`Dispatchers.IO`)로 이동하고, `isProcessing = true`로 상태를 두어 로딩 인디케이터를 활성화합니다.
+  - `ContentResolver.openOutputStream`을 사용하여 원격/로컬 스트림에 XML 데이터를 쓰고 자원을 안전하게 해제(`use` 블록)합니다.
+  - 성공/실패 여부에 따라 Toast 메시지 피드백을 사용자에게 보여주고 진행 중 상태를 해제합니다.
+- **사용자 경험 (UX) 버튼 배치 (`BottomControls`)**:
+  - 경로 작성이 완료된 `DrawingMode.DONE` 상태에서만 GPX 공유 버튼이 애니메이션 효과와 함께 노출됩니다.
+  - 테마의 tertiaryContainer 배경색과 함께 `Icons.Default.Share` 아이콘을 사용해 프리미엄 디자인 룩앤필을 보장합니다.
+
+---
+
 ## 파일 목록
 
 | 파일 | 역할 |
 |------|------|
+| `ExportGpxUseCase` | snappedRoute 리스트를 표준 GPX 1.1 XML 형식으로 변환 |
 | `SimplifyPathUseCase` | RDP 알고리즘, cosLat 보정, epsilon 파라미터 노출 |
 | `SnapToRoadUseCase` | 입력 RDP → 샘플링 → API → 출력 RDP 파이프라인, `fromWaypoints()` |
 | `RouteRepositoryImpl` | T-Map 청크 분할 호출, 경계 트리밍, 중복 좌표 제거 |
 | `MapState` | DrawingMode, drawnPoints, simplifiedPoints, snappedRoute, routeMarkers, 선택 상태 등 |
-| `MapViewModel` | 모든 인텐트, sampleMarkers, rerouteWithMarkers, isContinuing 분기 |
+| `MapViewModel` | 모든 인텐트, sampleMarkers, rerouteWithMarkers, isContinuing 분기, GPX 저장 액션 처리 |
 | `DrawingOverlay` | Canvas 기반 손그림 · 직선화 오버레이, 스냅존 원 |
-| `MapScreen` | NaverMap Compose, segmentize, PathOverlay/Marker 렌더링, AlertDialog |
-| `BottomControls` | 그리기 / 스냅 / 이어 그리기 / 지우기 FAB |
+| `MapScreen` | NaverMap Compose, segmentize, PathOverlay/Marker 렌더링, GPX 내보내기 런처 연동, AlertDialog |
+| `BottomControls` | 그리기 / 스냅 / 이어 그리기 / 지우기 / GPX 내보내기 FAB |
 
 ---
 
@@ -190,3 +209,4 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `a75f758` | feat: 기존 경로에 이어 그리기 기능 추가 |
 | `bf80454` | feat: 구간 탭으로 삭제 기능 추가 |
 | `db4921f` | feat: 출발/도착 마커(S/G) 도입 및 최종 포인트 드래그 이동 시 경로 단축 최적화 |
+| `e8a7fbc` | feat: GPX 1.1 표준 규격 내보내기(Export) 기능 추가 및 SAF 저장 다이얼로그 구현 |
