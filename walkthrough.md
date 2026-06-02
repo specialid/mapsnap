@@ -148,6 +148,19 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
   - 사용자가 **적용** 버튼을 누르면 `onApplyEdits()`가 호출되어 출발지, 중간 마커들, 목적지를 통합한 전체 웨이포인트를 구성하고, `snapToRoad.fromWaypoints()` API를 통해 전체 경로에 대해 일괄적으로 도로 스냅 재탐색을 실행합니다.
   - 재탐색 성공 시 새로운 스냅 경로로 상태를 업데이트하고 중간 마커들을 재샘플링한 후 `hasPendingEdits`를 `false`로 재설정합니다.
 
+### 마커 편집 단계별 실행 취소 (Undo)
+
+- **편집 상태 이력 스택 (`EditSnapshot` & `editHistory`)**:
+  - 편집 중인 상태 데이터(`routeStart`, `routeEnd`, `routeMarkers`, `snappedRoute`)의 스냅샷을 나타내는 `@Immutable` `EditSnapshot` 데이터 모델을 정의했습니다.
+  - 마커 조작 시마다 이전 상태의 스냅샷을 `editHistory: List<EditSnapshot>` 스택 형태로 누적 관리하여 다단계 되돌리기 기능을 제공합니다.
+- **제스처 구분 및 스냅샷 저장 시점 최적화**:
+  - 마커 드래그 시 매 프레임 스냅샷이 과다 저장되어 이력 스택이 폭발하는 현상을 차단하기 위해, 드래그 시작 시점(`onDragStart`)에만 딱 1회 스냅샷을 저장하도록 제스처 트리거를 설계했습니다.
+  - 마커/구간 삭제 및 지도 탭 이동 등의 단발성 편집 시점에는 동작을 적용하기 직전에 스냅샷을 캡처해 이력에 추가합니다.
+- **단계별 되돌리기 구현 (`onUndo`)**:
+  - 사용자가 하단의 실행 취소(Undo) 버튼(Floating Action Button)을 누르면, 이력 스택에서 가장 최신 스냅샷을 꺼내 해당 상태로 복원합니다.
+  - 편집 내용을 전부 되돌려 이력 스택이 비게 되면(`editHistory.isEmpty()`), 변경 대기 상태 플래그(`hasPendingEdits`)도 자동으로 `false`로 복구하여 미수정 원래 상태로 복귀시킵니다.
+  - [적용] 버튼을 눌러 T-Map 실도로 스냅을 확정 갱신하거나 지우기/새 그리기 진행 시에는 이력 스택이 초기화(`emptyList()`)됩니다.
+
 ---
 
 ## 이어 그리기
@@ -260,5 +273,6 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `f3a1d9c` | feat: T-Map API 호출 횟수 최적화 (동적 샘플링, 드래그 중복 제거, 마커 삭제 우회) |
 | `bcca9af` | feat: T-Map API 호출 최적화 및 중간 마커 순서 식별성 UX 개선 |
 | `8ff0213` | feat: 중간 마커 직접 삭제 및 T-Map 국소 재라우팅 연동 기능 추가 |
-| `26783b2` | feat: 로컬 경로 업데이트 및 배치 재라우팅 (Apply edits) 일괄 적용 기능 구현 |
+| `da8aa6a` | feat: 로컬 경로 업데이트 및 배치 재라우팅 (Apply edits) 일괄 적용 기능 구현 |
+| `abe1464` | feat: 마커 편집 단계별 실행 취소 (Undo) 기능 구현 |
 

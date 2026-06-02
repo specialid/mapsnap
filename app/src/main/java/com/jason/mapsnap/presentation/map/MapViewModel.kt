@@ -102,7 +102,8 @@ class MapViewModel @Inject constructor(
                         snappedRoute = emptyList(),
                         routeMarkers = emptyList(),
                         routeStart = null,
-                        routeEnd = null
+                        routeEnd = null,
+                        editHistory = emptyList()
                     )
                 }
             }
@@ -159,7 +160,8 @@ class MapViewModel @Inject constructor(
                 showDeleteSegmentDialog = false,
                 routeStart = null,
                 routeEnd = null,
-                error = null
+                error = null,
+                editHistory = emptyList()
             )
         }
     }
@@ -189,13 +191,15 @@ class MapViewModel @Inject constructor(
         val next = if (idx == state.routeMarkers.lastIndex) end else state.routeMarkers[idx + 1]
         val updatedMarkers = state.routeMarkers.toMutableList().also { it.removeAt(idx) }
         val newRoute = spliceRoute(state.snappedRoute, prev, next, listOf(prev, next))
+        val newHistory = state.editHistory + EditSnapshot(state.routeStart, state.routeEnd, state.routeMarkers, state.snappedRoute)
         reduce {
             state.copy(
                 routeMarkers = updatedMarkers,
                 snappedRoute = newRoute,
                 selectedMarkerIndex = -1,
                 showDeleteMarkerDialog = false,
-                hasPendingEdits = true
+                hasPendingEdits = true,
+                editHistory = newHistory
             )
         }
     }
@@ -288,13 +292,15 @@ class MapViewModel @Inject constructor(
         val next = if (markerIdx == markers.lastIndex) end else markers[markerIdx + 1]
         val updatedMarkers = markers.toMutableList().also { it.removeAt(markerIdx) }
         val newRoute = spliceRoute(state.snappedRoute, prev, next, listOf(prev, next))
+        val newHistory = state.editHistory + EditSnapshot(state.routeStart, state.routeEnd, state.routeMarkers, state.snappedRoute)
         reduce {
             state.copy(
                 routeMarkers = updatedMarkers,
                 snappedRoute = newRoute,
                 selectedSegmentIndex = -1,
                 showDeleteSegmentDialog = false,
-                hasPendingEdits = true
+                hasPendingEdits = true,
+                editHistory = newHistory
             )
         }
     }
@@ -307,6 +313,7 @@ class MapViewModel @Inject constructor(
     /** 지도 탭: 선택된 마커를 해당 위치로 이동 후 해당 구간만 재탐색 */
     fun onMapTapped(latLng: LatLng) = intent {
         val idx = state.selectedMarkerIndex
+        val newHistory = state.editHistory + EditSnapshot(state.routeStart, state.routeEnd, state.routeMarkers, state.snappedRoute)
         when (idx) {
             -2 -> {
                 val start = state.routeStart ?: return@intent
@@ -317,7 +324,8 @@ class MapViewModel @Inject constructor(
                         routeStart = latLng,
                         snappedRoute = newRoute,
                         selectedMarkerIndex = -1,
-                        hasPendingEdits = true
+                        hasPendingEdits = true,
+                        editHistory = newHistory
                     )
                 }
             }
@@ -330,7 +338,8 @@ class MapViewModel @Inject constructor(
                         routeEnd = latLng,
                         snappedRoute = newRoute,
                         selectedMarkerIndex = -1,
-                        hasPendingEdits = true
+                        hasPendingEdits = true,
+                        editHistory = newHistory
                     )
                 }
             }
@@ -348,7 +357,8 @@ class MapViewModel @Inject constructor(
                         routeMarkers = updatedMarkers,
                         snappedRoute = newRoute,
                         selectedMarkerIndex = -1,
-                        hasPendingEdits = true
+                        hasPendingEdits = true,
+                        editHistory = newHistory
                     )
                 }
             }
@@ -358,6 +368,39 @@ class MapViewModel @Inject constructor(
     /** 선택 해제 */
     fun onMarkerDeselect() = intent {
         reduce { state.copy(selectedMarkerIndex = -1) }
+    }
+
+    fun onDragStart() = intent {
+        val currentSnapshot = EditSnapshot(
+            routeStart = state.routeStart,
+            routeEnd = state.routeEnd,
+            routeMarkers = state.routeMarkers,
+            snappedRoute = state.snappedRoute
+        )
+        reduce {
+            state.copy(
+                editHistory = state.editHistory + currentSnapshot
+            )
+        }
+    }
+
+    fun onUndo() = intent {
+        val history = state.editHistory
+        if (history.isEmpty()) return@intent
+        val lastSnapshot = history.last()
+        val updatedHistory = history.subList(0, history.size - 1)
+        reduce {
+            state.copy(
+                routeStart = lastSnapshot.routeStart,
+                routeEnd = lastSnapshot.routeEnd,
+                routeMarkers = lastSnapshot.routeMarkers,
+                snappedRoute = lastSnapshot.snappedRoute,
+                editHistory = updatedHistory,
+                hasPendingEdits = updatedHistory.isNotEmpty(),
+                selectedMarkerIndex = -1,
+                selectedSegmentIndex = -1
+            )
+        }
     }
 
     /**
@@ -381,6 +424,7 @@ class MapViewModel @Inject constructor(
                         routeStart = newRoute.firstOrNull() ?: state.routeStart,
                         routeEnd = newRoute.lastOrNull() ?: state.routeEnd,
                         hasPendingEdits = false,
+                        editHistory = emptyList(),
                         isProcessing = false,
                         error = null
                     )
@@ -514,6 +558,7 @@ class MapViewModel @Inject constructor(
                         selectedMarkerIndex = -1,
                         routeStart = combined.first(),
                         routeEnd = combined.last(),
+                        editHistory = emptyList(),
                         isProcessing = false,
                         error = null
                     )

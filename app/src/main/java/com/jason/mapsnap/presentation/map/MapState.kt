@@ -4,6 +4,14 @@ import androidx.compose.runtime.Immutable
 import com.naver.maps.geometry.LatLng
 
 @Immutable
+data class EditSnapshot(
+    val routeStart: LatLng?,
+    val routeEnd: LatLng?,
+    val routeMarkers: List<LatLng>,
+    val snappedRoute: List<LatLng>
+)
+
+@Immutable
 data class MapState(
     val drawingMode: DrawingMode = DrawingMode.IDLE,
     val drawnPoints: List<LatLng> = emptyList(),
@@ -23,7 +31,10 @@ data class MapState(
     val error: String? = null,
     val tmapApiCallCount: Int = 0,
     val naverMapApiCallCount: Int = 0,
-    val hasPendingEdits: Boolean = false
-)
+    val hasPendingEdits: Boolean = false,
+    val editHistory: List<EditSnapshot> = emptyList()
+) {
+    val canUndo: Boolean get() = editHistory.isNotEmpty()
+}
 
 enum class DrawingMode { IDLE, DRAWING, PROCESSING, DONE }

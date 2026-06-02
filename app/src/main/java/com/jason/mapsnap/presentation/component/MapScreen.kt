@@ -382,6 +382,7 @@ fun MapScreen(
                             var accumulatedDrag: PointF? = null
                             detectDragGestures(
                                 onDragStart = { _ ->
+                                    viewModel.onDragStart()
                                     val startPos = currentMarkerPosState.value
                                     val startScreenPoint = projection.toScreenLocation(startPos)
                                     accumulatedDrag = PointF(startScreenPoint.x, startScreenPoint.y)
@@ -519,7 +520,9 @@ fun MapScreen(
         BottomControls(
             drawingMode = state.drawingMode,
             hasPendingEdits = state.hasPendingEdits,
+            canUndo = state.canUndo,
             onApplyEdits = viewModel::onApplyEdits,
+            onUndo = viewModel::onUndo,
             onDrawToggle = viewModel::onDrawToggle,
             onContinue = viewModel::onContinueDrawing,
             onClear = viewModel::onClearDrawing,

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
@@ -33,7 +34,9 @@ import com.jason.mapsnap.presentation.map.DrawingMode
 fun BottomControls(
     drawingMode: DrawingMode,
     hasPendingEdits: Boolean,
+    canUndo: Boolean,
     onApplyEdits: () -> Unit,
+    onUndo: () -> Unit,
     onDrawToggle: () -> Unit,
     onContinue: () -> Unit,
     onClear: () -> Unit,
@@ -73,6 +76,20 @@ fun BottomControls(
                 text = { Text("GPX") },
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer
             )
+        }
+
+        // 실행 취소 버튼 (DONE 상태이고 실행 취소가 가능할 때만 표시)
+        AnimatedVisibility(
+            visible = drawingMode == DrawingMode.DONE && canUndo,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            FloatingActionButton(
+                onClick = onUndo,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Icon(imageVector = Icons.Default.Undo, contentDescription = "실행 취소")
+            }
         }
 
         // 적용 버튼 (DONE 상태이고 펜딩 수정사항이 있을 때만 표시)
