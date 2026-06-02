@@ -19,7 +19,9 @@ data class MapState(
     val routeEnd: LatLng? = null,                 // 마커 재라우팅 시 고정 끝점
     val currentLocation: LatLng? = null,
     val isProcessing: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val tmapApiCallCount: Int = 0,
+    val naverMapApiCallCount: Int = 0
 )
 
 enum class DrawingMode { IDLE, DRAWING, PROCESSING, DONE }

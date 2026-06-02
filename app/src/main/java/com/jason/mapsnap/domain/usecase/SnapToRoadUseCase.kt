@@ -29,8 +29,14 @@ class SnapToRoadUseCase @Inject constructor(
             return Result.failure(IllegalStateException("경로 단순화 후 포인트가 부족합니다"))
         }
 
+        var totalDist = 0.0
+        for (i in 0 until simplified.size - 1) {
+            totalDist += haversineMeters(simplified[i], simplified[i + 1])
+        }
+        val dynamicMaxWaypoints = (totalDist / 50.0).toInt().coerceIn(2, 19)
+
         // 아크-길이 기반 균등 샘플링: 코너 밀집 구간 과탈락 방지
-        val waypoints = sampleByArcLength(simplified, maxWaypoints)
+        val waypoints = sampleByArcLength(simplified, dynamicMaxWaypoints)
 
         val routeResult = repository.getPedestrianRoute(waypoints)
 

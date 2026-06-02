@@ -53,6 +53,18 @@ import com.naver.maps.map.compose.rememberMarkerState
 import com.naver.maps.map.overlay.OverlayImage
 import org.orbitmvi.orbit.compose.collectAsState
 import org.orbitmvi.orbit.compose.collectSideEffect
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 
 private val SeoulCityHall = LatLng(37.5666, 126.9784)
 
@@ -84,7 +96,7 @@ private fun segmentize(route: List<LatLng>, markers: List<LatLng>): List<List<La
 enum class MarkerType { START, END, INTERMEDIATE }
 
 /** 마커 아이콘: 타입 및 선택 여부에 따라 원형 비트맵(글자 포함) 생성 */
-private fun markerIcon(type: MarkerType, selected: Boolean): OverlayImage {
+private fun markerIcon(type: MarkerType, label: String?, selected: Boolean): OverlayImage {
     val size = 80
     val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
@@ -126,22 +138,24 @@ private fun markerIcon(type: MarkerType, selected: Boolean): OverlayImage {
     paint.color = strokeColor
     canvas.drawCircle(size / 2f, size / 2f, size / 2f - 6f, paint)
 
-    // 텍스트 그리기
-    val text = when (type) {
-        MarkerType.START -> "S"
-        MarkerType.END -> "G"
-        MarkerType.INTERMEDIATE -> null
+    // 텍스트 색상 및 텍스트 그리기
+    val textColor = if (selected) {
+        0xFFFFFFFF.toInt()
+    } else if (type == MarkerType.INTERMEDIATE) {
+        0xFF1565C0.toInt()
+    } else {
+        0xFFFFFFFF.toInt()
     }
 
-    if (text != null) {
+    if (label != null) {
         paint.style = android.graphics.Paint.Style.FILL
-        paint.color = 0xFFFFFFFF.toInt()
-        paint.textSize = 40f
+        paint.color = textColor
+        paint.textSize = if (label.length > 1) 32f else 38f
         paint.textAlign = android.graphics.Paint.Align.CENTER
         paint.isFakeBoldText = true
         val textHeight = paint.descent() - paint.ascent()
         val textOffset = textHeight / 2 - paint.descent()
-        canvas.drawText(text, size / 2f, size / 2f + textOffset, paint)
+        canvas.drawText(label, size / 2f, size / 2f + textOffset, paint)
     }
 
     return OverlayImage.fromBitmap(bitmap)
@@ -232,6 +246,7 @@ fun MapScreen(
         ) {
             MapEffect(Unit) { map ->
                 naverMap = map
+                viewModel.onNaverMapLoaded()
             }
             // 경로를 마커 위치 기준으로 구간 분할 → 각 구간 별도 PathOverlay
             // 탭 → 삭제 다이얼로그 표시
@@ -267,7 +282,7 @@ fun MapScreen(
                     }
                     NaverMarker(
                         state = markerState,
-                        icon = markerIcon(MarkerType.START, isSelected),
+                        icon = markerIcon(MarkerType.START, "S", isSelected),
                         anchor = Offset(0.5f, 0.5f),
                         onClick = {
                             viewModel.onStartMarkerTapped()
@@ -287,7 +302,7 @@ fun MapScreen(
                     }
                     NaverMarker(
                         state = markerState,
-                        icon = markerIcon(MarkerType.END, isSelected),
+                        icon = markerIcon(MarkerType.END, "G", isSelected),
                         anchor = Offset(0.5f, 0.5f),
                         onClick = {
                             viewModel.onEndMarkerTapped()
@@ -307,7 +322,7 @@ fun MapScreen(
                     }
                     NaverMarker(
                         state = markerState,
-                        icon = markerIcon(MarkerType.INTERMEDIATE, selected = isSelected),
+                        icon = markerIcon(MarkerType.INTERMEDIATE, (index + 1).toString(), isSelected),
                         anchor = Offset(0.5f, 0.5f),
                         onClick = {
                             viewModel.onMarkerTapped(index)
@@ -391,6 +406,77 @@ fun MapScreen(
                             .size(32.dp)
                             .background(Color(0xFFE65100), shape = CircleShape)
                             .border(3.dp, Color(0xFFBF360C), shape = CircleShape)
+                    )
+                }
+            }
+        }
+
+        // API 호출 현황 top-right overlay counter (glassmorphism style)
+        Card(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xCC1F1F23)
+            ),
+            border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    text = "API 호출 현황",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                Row(
+                    modifier = Modifier.padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(Color(0xFF2196F3), shape = CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "T-Map API: ",
+                        color = Color(0xFFB0BEC5),
+                        fontSize = 11.sp
+                    )
+                    Text(
+                        text = "${state.tmapApiCallCount} 회",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+                Row(
+                    modifier = Modifier.padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(Color(0xFF4CAF50), shape = CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Naver Map API: ",
+                        color = Color(0xFFB0BEC5),
+                        fontSize = 11.sp
+                    )
+                    Text(
+                        text = "${state.naverMapApiCallCount} 회",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
                     )
                 }
             }

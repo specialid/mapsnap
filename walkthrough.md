@@ -103,6 +103,9 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 
 - 스냅 완료 후 `sampleMarkers(route, 80m)`로 최초 자동 생성 (기존 30m에서 80m로 늘려 조절 포인트 과다 생성 방지)
 - 마커 탭 → 선택(주황 표시)
+- **마커 내부 순서 번호 표시**:
+  - 각 중간 마커는 생성된 순서에 따라 **1부터 시작하는 순서 번호(Sequence Number)**가 마커 중앙에 표시됩니다.
+  - 선택되지 않은 상태에서는 파란색 테두리 색상과 동일한 파란색(`0xFF1565C0`) 글씨로 표시되며, 선택되었을 때는 흰색(`0xFFFFFFFF`) 글씨로 반전되어 시각적 명확성을 보장합니다.
 - **드래그 앤 드롭 이동(Drag-to-Move)**: 
   - 선택된 마커 위에 Compose 오버레이를 통해 큰 터치 대상 영역(`64dp`)을 가진 드래그 핸들을 배치하여 가시성 및 터치 조작성을 대폭 강화합니다. (마커 지름은 80px로 2배 확대)
   - 사용자가 드래그를 진행할 때 Compose의 `detectDragGestures` 및 지도 `Projection`을 연동해 실시간 좌표를 추출하고 뷰모델 상태를 갱신합니다.
@@ -115,6 +118,7 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 
 - **출발(S) 및 도착(G) 마커 시각화**: 
   - 경로의 양 끝 최종 지점에 각각 초록색 바탕의 `S`(출발) 마커와 빨간색 바탕의 `G`(도착/종료) 마커가 표시됩니다.
+  - 선택 여부와 관계없이 텍스트는 항상 흰색(`0xFFFFFFFF`)으로 시각화되어 가독성을 높입니다.
   - 선택 시 중간 마커와 동일하게 오렌지색 하이라이트가 부여되고 드래그 조절 패널이 노출됩니다.
 - **최종 포인트 드래그 시 경로 단축**:
   - **도착 마커(G)**를 원래 종료 지점보다 더 짧은 위치로 이동시키면 `routeEnd`가 갱신되며, 마지막 중간 마커에서 신규 도착지까지의 경로만 재탐색(Reroute)합니다. 기존에 목적지 통과 후 이전의 원래 종점으로 회귀하는 불필요한 경로(루프)가 깔끔하게 사라지며 **경로가 정상적으로 단축**됩니다.
@@ -185,6 +189,29 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 
 ---
 
+## API 호출 모니터링 및 실시간 대시보드 오버레이
+
+- **실시간 호출 횟수 관리 (`ApiCallTracker`)**:
+  - Hilt 싱글톤으로 인스턴스화되며, `StateFlow` 구조를 통해 멀티스레드 환경에서 안전하고 신속하게 T-Map 및 Naver Map API 호출 수를 관리합니다 (`update { it + 1 }`).
+- **상세 분석 로깅 (`RouteRepositoryImpl` & `MapViewModel`)**:
+  - T-Map API 호출 전후로 청크 인덱스, 총 청크 수, 시작/끝 좌표 및 수신한 Feature 개수를 `Log.d("RouteRepositoryImpl", ...)`로 로깅하여 트래픽의 규모와 분할 전송 상태를 투명하게 모니터링할 수 있습니다.
+  - 네이버 지도가 초기화되어 실제로 로딩을 마치는 시점(`MapEffect(Unit)`)에 `Log.d("MapViewModel", ...)`로 로딩 기록을 남기고 카운팅을 진행합니다.
+- **글래스모피즘 오버레이 UI 대시보드 (`MapScreen`)**:
+  - 지도 우측 상단에 세련된 반투명 카드 오버레이를 배치하여 `T-Map API` 및 `Naver Map API` 호출 카운트를 실시간으로 동기화하여 시각적으로 모니터링할 수 있도록 설계하였습니다.
+
+---
+
+## T-Map API 호출 최적화
+
+- **경로 길이에 따른 동적 웨이포인트 샘플링**:
+  - `SnapToRoadUseCase`에서 단순화된 경로(`simplified`)의 총 누적 거리(Haversine 공식)를 계산하고, 이에 비례하는 동적 웨이포인트 개수(`dynamicMaxWaypoints = (totalDist / 50.0).toInt().coerceIn(2, 19)`)를 계산하여 샘플링을 수행합니다. 이를 통해 짧은 경로에서 불필요하게 많은 웨이포인트를 생성 및 호출하지 않도록 최적화합니다.
+- **드래그 위치 변경 중복 검사**:
+  - `MapViewModel`의 `onMarkerDragged`, `onStartMarkerDragged`, `onEndMarkerDragged` 메서드에서 드래그 이벤트로 수신한 신규 좌표가 현재 마커/출발/도착점 좌표와 완전히 동일한 경우 작업을 즉시 생략하고 반환하여 불필요한 재라우팅 처리를 차단합니다.
+- **단거리 마커 삭제 시 T-Map API 우회**:
+  - `MapViewModel.handlePartialReroute`에서 `MarkerRemoved` 이벤트 시 이전 경계(`prevBoundary`)와 다음 경계(`nextBoundary`) 사이의 거리가 15.0미터 미만인 경우 T-Map API를 호출하지 않고, 기존 경로에서 두 경계를 직선으로 연결하는 방식으로 자체 우회(Bypass) 접합하여 네트워크 비용을 제거합니다.
+
+---
+
 ## 파일 목록
 
 | 파일 | 역할 |
@@ -193,10 +220,11 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `SimplifyPathUseCase` | RDP 알고리즘, cosLat 보정, epsilon 파라미터 노출 |
 | `SnapToRoadUseCase` | 입력 RDP → 샘플링 → API → 출력 RDP 파이프라인, `fromWaypoints()` |
 | `RouteRepositoryImpl` | T-Map 청크 분할 호출, 경계 트리밍, 중복 좌표 제거 |
-| `MapState` | DrawingMode, drawnPoints, simplifiedPoints, snappedRoute, routeMarkers, 선택 상태 등 |
-| `MapViewModel` | 모든 인텐트, sampleMarkers, rerouteWithMarkers, isContinuing 분기, GPX 저장 액션 처리 |
+| `ApiCallTracker` | T-Map 및 네이버 지도 API 호출 횟수를 집계 및 관리하는 싱글톤 컴포넌트 |
+| `MapState` | DrawingMode, drawnPoints, simplifiedPoints, snappedRoute, routeMarkers, API 카운트 등 |
+| `MapViewModel` | 모든 인텐트, sampleMarkers, API 카운트 Flow 수집, GPX 저장 액션 처리 |
 | `DrawingOverlay` | Canvas 기반 손그림 · 직선화 오버레이, 스냅존 원 |
-| `MapScreen` | NaverMap Compose, segmentize, PathOverlay/Marker 렌더링, GPX 내보내기 런처 연동, AlertDialog |
+| `MapScreen` | NaverMap Compose, segmentize, PathOverlay/Marker 렌더링, API 카운터 대시보드 오버레이, AlertDialog |
 | `BottomControls` | 그리기 / 스냅 / 이어 그리기 / 지우기 / GPX 내보내기 FAB |
 
 ---
@@ -210,3 +238,8 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `bf80454` | feat: 구간 탭으로 삭제 기능 추가 |
 | `db4921f` | feat: 출발/도착 마커(S/G) 도입 및 최종 포인트 드래그 이동 시 경로 단축 최적화 |
 | `e8a7fbc` | feat: GPX 1.1 표준 규격 내보내기(Export) 기능 추가 및 SAF 저장 다이얼로그 구현 |
+| `1cf427d` | feat: T-Map & 네이버 지도 API 호출 추적 로깅 및 실시간 카운터 오버레이 대시보드 추가 |
+| `db29f12` | fix: T-Map API 호출 시 연속 중복 좌표 제거를 통한 HTTP 400 오류 해결 |
+| `f3a1d9c` | feat: T-Map API 호출 횟수 최적화 (동적 샘플링, 드래그 중복 제거, 마커 삭제 우회) |
+| `dce93b2` | feat: T-Map API 호출 최적화 및 중간 마커 순서 식별성 UX 개선 |
+

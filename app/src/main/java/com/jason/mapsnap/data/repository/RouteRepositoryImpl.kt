@@ -1,7 +1,9 @@
 package com.jason.mapsnap.data.repository
 
+import android.util.Log
 import com.jason.mapsnap.data.remote.TmapService
 import com.jason.mapsnap.data.remote.dto.TmapRequest
+import com.jason.mapsnap.data.tracker.ApiCallTracker
 import com.jason.mapsnap.domain.repository.RouteRepository
 import com.naver.maps.geometry.LatLng
 import javax.inject.Inject
@@ -11,7 +13,8 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 class RouteRepositoryImpl @Inject constructor(
-    private val service: TmapService
+    private val service: TmapService,
+    private val apiCallTracker: ApiCallTracker
 ) : RouteRepository {
 
     companion object {
@@ -33,7 +36,14 @@ class RouteRepositoryImpl @Inject constructor(
     override suspend fun getPedestrianRoute(
         waypoints: List<LatLng>
     ): Result<List<LatLng>> = runCatching {
-        require(waypoints.size >= 2) { "최소 2개 이상의 포인트가 필요합니다" }
+        val uniqueWaypoints = mutableListOf<LatLng>()
+        for (pt in waypoints) {
+            if (uniqueWaypoints.isEmpty() || uniqueWaypoints.last() != pt) {
+                uniqueWaypoints.add(pt)
+            }
+        }
+
+        require(uniqueWaypoints.size >= 2) { "최소 2개 이상의 포인트가 필요합니다" }
 
         val apiKey = com.jason.mapsnap.BuildConfig.TMAP_API_KEY
         if (apiKey.isEmpty()) {
@@ -44,9 +54,9 @@ class RouteRepositoryImpl @Inject constructor(
         val chunks = mutableListOf<List<LatLng>>()
         var startIndex = 0
         val chunkSize = 7 
-        while (startIndex < waypoints.size - 1) {
-            val endIndex = (startIndex + chunkSize - 1).coerceAtMost(waypoints.size - 1)
-            chunks.add(waypoints.subList(startIndex, endIndex + 1))
+        while (startIndex < uniqueWaypoints.size - 1) {
+            val endIndex = (startIndex + chunkSize - 1).coerceAtMost(uniqueWaypoints.size - 1)
+            chunks.add(uniqueWaypoints.subList(startIndex, endIndex + 1))
             startIndex = endIndex
         }
 
@@ -69,8 +79,22 @@ class RouteRepositoryImpl @Inject constructor(
                 passList = passList
             )
 
+            Log.d(
+                "RouteRepositoryImpl",
+                "Starting T-Map API call - Chunk: $chunkIndex/${chunks.size}, Start: (${start.latitude}, ${start.longitude}), End: (${end.latitude}, ${end.longitude}), passList: $passList"
+            )
+
+            apiCallTracker.incrementTmap()
+
             val response = service.getPedestrianRoute(appKey = apiKey, request = request)
-            val features = response.features ?: continue
+            val features = response.features
+
+            Log.d(
+                "RouteRepositoryImpl",
+                "Completed T-Map API call - Chunk: $chunkIndex/${chunks.size}, Success: ${features != null}, Features size: ${features?.size ?: 0}"
+            )
+
+            if (features == null) continue
 
             for (feature in features) {
                 if (feature.geometry.type == "LineString") {

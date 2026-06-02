@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.jason.mapsnap.data.tracker.ApiCallTracker
 import com.jason.mapsnap.domain.usecase.ExportGpxUseCase
 import com.jason.mapsnap.domain.usecase.SimplifyPathUseCase
 import com.jason.mapsnap.domain.usecase.SnapToRoadUseCase
@@ -28,7 +29,8 @@ import kotlin.math.sqrt
 class MapViewModel @Inject constructor(
     private val snapToRoad: SnapToRoadUseCase,
     private val simplifyPath: SimplifyPathUseCase,
-    private val exportGpx: ExportGpxUseCase
+    private val exportGpx: ExportGpxUseCase,
+    private val apiCallTracker: ApiCallTracker
 ) : ViewModel(), ContainerHost<MapState, MapSideEffect> {
 
     override val container = container<MapState, MapSideEffect>(MapState())
@@ -51,6 +53,25 @@ class MapViewModel @Inject constructor(
                 handlePartialReroute(event)
             }
         }
+        viewModelScope.launch {
+            apiCallTracker.tmapCount.collect { count ->
+                intent {
+                    reduce { state.copy(tmapApiCallCount = count) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            apiCallTracker.naverCount.collect { count ->
+                intent {
+                    reduce { state.copy(naverMapApiCallCount = count) }
+                }
+            }
+        }
+    }
+
+    fun onNaverMapLoaded() = intent {
+        apiCallTracker.incrementNaver()
+        Log.d("MapViewModel", "Naver Map API (Mobile Dynamic Map) 로딩 완료")
     }
 
     fun onLocationPermissionResult(granted: Boolean) {
@@ -172,6 +193,7 @@ class MapViewModel @Inject constructor(
 
     /** 마커 드래그 시 마커 위치 갱신 및 국소 재라우팅 신호 전송 */
     fun onMarkerDragged(index: Int, latLng: LatLng) = intent {
+        if (state.routeMarkers.getOrNull(index) == latLng) return@intent
         val markers = state.routeMarkers
         if (index < 0 || index >= markers.size) return@intent
         val updated = markers.toMutableList().also { it[index] = latLng }
@@ -180,11 +202,13 @@ class MapViewModel @Inject constructor(
     }
 
     fun onStartMarkerDragged(latLng: LatLng) = intent {
+        if (state.routeStart == latLng) return@intent
         reduce { state.copy(routeStart = latLng) }
         _rerouteSignal.emit(PartialRerouteEvent.StartMoved(latLng))
     }
 
     fun onEndMarkerDragged(latLng: LatLng) = intent {
+        if (state.routeEnd == latLng) return@intent
         reduce { state.copy(routeEnd = latLng) }
         _rerouteSignal.emit(PartialRerouteEvent.EndMoved(latLng))
     }
@@ -285,6 +309,22 @@ class MapViewModel @Inject constructor(
                 val prev = markers.lastOrNull() ?: start
                 Triple(prev, end, listOf(prev, event.newPos))
             }
+        }
+
+        if (event is PartialRerouteEvent.MarkerRemoved && haversineMeters(prevBoundary, nextBoundary) < 15.0) {
+            val subRoute = listOf(prevBoundary, nextBoundary)
+            val newRoute = spliceRoute(route, prevBoundary, nextBoundary, subRoute)
+            reduce {
+                state.copy(
+                    snappedRoute = newRoute,
+                    routeStart = newRoute.firstOrNull() ?: state.routeStart,
+                    routeEnd = newRoute.lastOrNull() ?: state.routeEnd,
+                    selectedMarkerIndex = -1,
+                    isProcessing = false,
+                    error = null
+                )
+            }
+            return@intent
         }
 
         reduce { state.copy(isProcessing = true) }
