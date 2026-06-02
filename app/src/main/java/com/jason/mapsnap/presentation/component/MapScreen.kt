@@ -46,6 +46,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.key
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.gestures.detectTapGestures
 import com.naver.maps.map.compose.Marker as NaverMarker
 import com.naver.maps.map.compose.PathOverlay
 import com.naver.maps.map.compose.rememberCameraPositionState
@@ -408,6 +412,36 @@ fun MapScreen(
                             .border(3.dp, Color(0xFFBF360C), shape = CircleShape)
                     )
                 }
+
+                if (selectedIndex >= 0) {
+                    val bubbleSizeDp = 40.dp
+                    val bubbleSizePx = 40f * density
+                    Box(
+                        modifier = Modifier
+                            .offset {
+                                IntOffset(
+                                    (screenPoint.x - bubbleSizePx / 2).toInt(),
+                                    (screenPoint.y - 48f * density - bubbleSizePx / 2).toInt()
+                                )
+                            }
+                            .size(bubbleSizeDp)
+                            .background(Color(0xFFE53935), shape = CircleShape)
+                            .border(2.dp, Color.White, shape = CircleShape)
+                            .pointerInput(selectedIndex) {
+                                detectTapGestures {
+                                    viewModel.onDeleteMarkerTapped()
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete Marker",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
             }
         }
 
@@ -504,6 +538,25 @@ fun MapScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { viewModel.onDeleteSegmentDismissed() }) {
+                        Text("취소")
+                    }
+                }
+            )
+        }
+
+        // 중간 마커 삭제 확인 다이얼로그
+        if (state.showDeleteMarkerDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.onDeleteMarkerDismissed() },
+                title = { Text("마커 삭제") },
+                text = { Text("선택한 중간 마커를 삭제하고 경로를 재탐색할까요?") },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.onDeleteMarkerConfirmed() }) {
+                        Text("삭제", color = Color(0xFFE53935))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.onDeleteMarkerDismissed() }) {
                         Text("취소")
                     }
                 }

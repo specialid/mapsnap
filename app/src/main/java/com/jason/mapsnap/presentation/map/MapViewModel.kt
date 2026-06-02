@@ -175,10 +175,38 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    /** 마커 탭: 미선택 → 선택 / 선택 중 재탭 → 해제 */
+    /** 마커 탭: 미선택 → 선택 / 선택 중 재탭 → 삭제 다이얼로그 표시 */
     fun onMarkerTapped(index: Int) = intent {
-        val next = if (state.selectedMarkerIndex == index) -1 else index
-        reduce { state.copy(selectedMarkerIndex = next) }
+        if (state.selectedMarkerIndex == index) {
+            reduce { state.copy(showDeleteMarkerDialog = true) }
+        } else {
+            reduce { state.copy(selectedMarkerIndex = index) }
+        }
+    }
+
+    fun onDeleteMarkerTapped() = intent {
+        reduce { state.copy(showDeleteMarkerDialog = true) }
+    }
+
+    fun onDeleteMarkerConfirmed() = intent {
+        val idx = state.selectedMarkerIndex
+        if (idx in state.routeMarkers.indices) {
+            val updated = state.routeMarkers.toMutableList().also { it.removeAt(idx) }
+            reduce {
+                state.copy(
+                    routeMarkers = updated,
+                    showDeleteMarkerDialog = false,
+                    selectedMarkerIndex = -1
+                )
+            }
+            _rerouteSignal.emit(PartialRerouteEvent.MarkerRemoved(idx))
+        } else {
+            reduce { state.copy(showDeleteMarkerDialog = false) }
+        }
+    }
+
+    fun onDeleteMarkerDismissed() = intent {
+        reduce { state.copy(showDeleteMarkerDialog = false) }
     }
 
     fun onStartMarkerTapped() = intent {

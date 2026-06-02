@@ -15,6 +15,7 @@ data class MapState(
     val selectedMarkerIndex: Int = -1,            // -1 = 선택 없음
     val selectedSegmentIndex: Int = -1,           // 탭된 구간 인덱스 (-1 = 없음)
     val showDeleteSegmentDialog: Boolean = false,
+    val showDeleteMarkerDialog: Boolean = false,
     val routeStart: LatLng? = null,               // 마커 재라우팅 시 고정 시작점
     val routeEnd: LatLng? = null,                 // 마커 재라우팅 시 고정 끝점
     val currentLocation: LatLng? = null,
