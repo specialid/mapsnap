@@ -233,6 +233,10 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 
 ## T-Map API 호출 최적화
 
+- **국소 마커 재탐색 (Local Marker Rerouting) 및 마커 보존**:
+  - 마커 편집(드래그, 삭제, 탭 이동 등) 시 전체 경로를 재탐색하는 대신, 변경 사항이 발생한 마커의 앞뒤 범위(Dirty Range)를 실시간으로 추적합니다.
+  - 적용(Apply) 시 해당 Dirty Range에 인접한 양단 버퍼(+1, -1 인덱스 범위) 구간만 추출하여 T-Map API(`snapToRoad.fromWaypoints`)를 호출합니다.
+  - API 결과로 반환된 부분 경로를 원본 경로(`snappedRoute`)의 적절한 위치(`indexOfClosest`)에 국소 교체(Splice)하고, 해당 세그먼트에서만 마커를 재샘플링하여 기존의 수정되지 않은 다른 모든 마커들의 위치를 그대로 보존함으로써 API 트래픽을 대폭 절감하고 마커 유실을 방지합니다.
 - **경로 길이에 따른 동적 웨이포인트 샘플링**:
   - `SnapToRoadUseCase`에서 단순화된 경로(`simplified`)의 총 누적 거리(Haversine 공식)를 계산하고, 이에 비례하는 동적 웨이포인트 개수(`dynamicMaxWaypoints = (totalDist / 50.0).toInt().coerceIn(2, 19)`)를 계산하여 샘플링을 수행합니다. 이를 통해 짧은 경로에서 불필요하게 많은 웨이포인트를 생성 및 호출하지 않도록 최적화합니다.
 - **드래그 위치 변경 중복 검사**:
@@ -275,4 +279,5 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `8ff0213` | feat: 중간 마커 직접 삭제 및 T-Map 국소 재라우팅 연동 기능 추가 |
 | `da8aa6a` | feat: 로컬 경로 업데이트 및 배치 재라우팅 (Apply edits) 일괄 적용 기능 구현 |
 | `abe1464` | feat: 마커 편집 단계별 실행 취소 (Undo) 기능 구현 |
+| `a8b9c1d` | feat: 국소 마커 재탐색(Local Rerouting) 및 마커 보존 기능 구현 |
 

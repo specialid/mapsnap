@@ -8,7 +8,9 @@ data class EditSnapshot(
     val routeStart: LatLng?,
     val routeEnd: LatLng?,
     val routeMarkers: List<LatLng>,
-    val snappedRoute: List<LatLng>
+    val snappedRoute: List<LatLng>,
+    val dirtyStart: Int? = null,
+    val dirtyEnd: Int? = null
 )
 
 @Immutable
@@ -32,7 +34,9 @@ data class MapState(
     val tmapApiCallCount: Int = 0,
     val naverMapApiCallCount: Int = 0,
     val hasPendingEdits: Boolean = false,
-    val editHistory: List<EditSnapshot> = emptyList()
+    val editHistory: List<EditSnapshot> = emptyList(),
+    val dirtyStart: Int? = null,
+    val dirtyEnd: Int? = null
 ) {
     val canUndo: Boolean get() = editHistory.isNotEmpty()
 }

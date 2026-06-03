@@ -161,7 +161,9 @@ class MapViewModel @Inject constructor(
                 routeStart = null,
                 routeEnd = null,
                 error = null,
-                editHistory = emptyList()
+                editHistory = emptyList(),
+                dirtyStart = null,
+                dirtyEnd = null
             )
         }
     }
@@ -191,7 +193,23 @@ class MapViewModel @Inject constructor(
         val next = if (idx == state.routeMarkers.lastIndex) end else state.routeMarkers[idx + 1]
         val updatedMarkers = state.routeMarkers.toMutableList().also { it.removeAt(idx) }
         val newRoute = spliceRoute(state.snappedRoute, prev, next, listOf(prev, next))
-        val newHistory = state.editHistory + EditSnapshot(state.routeStart, state.routeEnd, state.routeMarkers, state.snappedRoute)
+        val newHistory = state.editHistory + EditSnapshot(
+            state.routeStart,
+            state.routeEnd,
+            state.routeMarkers,
+            state.snappedRoute,
+            state.dirtyStart,
+            state.dirtyEnd
+        )
+        val controlPointIndex = idx
+        val adjustedStart = state.dirtyStart?.let { ds ->
+            val shifted = if (ds > idx + 1) ds - 1 else ds
+            minOf(shifted, controlPointIndex)
+        } ?: controlPointIndex
+        val adjustedEnd = state.dirtyEnd?.let { de ->
+            val shifted = if (de >= idx + 1) de - 1 else de
+            maxOf(shifted, controlPointIndex + 1)
+        } ?: (controlPointIndex + 1)
         reduce {
             state.copy(
                 routeMarkers = updatedMarkers,
@@ -199,7 +217,9 @@ class MapViewModel @Inject constructor(
                 selectedMarkerIndex = -1,
                 showDeleteMarkerDialog = false,
                 hasPendingEdits = true,
-                editHistory = newHistory
+                editHistory = newHistory,
+                dirtyStart = adjustedStart.coerceIn(0, updatedMarkers.size + 1),
+                dirtyEnd = adjustedEnd.coerceIn(0, updatedMarkers.size + 1)
             )
         }
     }
@@ -229,11 +249,16 @@ class MapViewModel @Inject constructor(
         val prev = if (index == 0) start else updatedMarkers[index - 1]
         val next = if (index == updatedMarkers.lastIndex) end else updatedMarkers[index + 1]
         val newRoute = spliceRoute(state.snappedRoute, prev, next, listOf(prev, latLng, next))
+        val controlPointIndex = index + 1
+        val newDirtyStart = state.dirtyStart?.let { minOf(it, controlPointIndex) } ?: controlPointIndex
+        val newDirtyEnd = state.dirtyEnd?.let { maxOf(it, controlPointIndex) } ?: controlPointIndex
         reduce {
             state.copy(
                 routeMarkers = updatedMarkers,
                 snappedRoute = newRoute,
-                hasPendingEdits = true
+                hasPendingEdits = true,
+                dirtyStart = newDirtyStart,
+                dirtyEnd = newDirtyEnd
             )
         }
     }
@@ -243,11 +268,16 @@ class MapViewModel @Inject constructor(
         val start = state.routeStart ?: return@intent
         val next = state.routeMarkers.firstOrNull() ?: state.routeEnd ?: return@intent
         val newRoute = spliceRoute(state.snappedRoute, start, next, listOf(latLng, next))
+        val controlPointIndex = 0
+        val newDirtyStart = state.dirtyStart?.let { minOf(it, controlPointIndex) } ?: controlPointIndex
+        val newDirtyEnd = state.dirtyEnd?.let { maxOf(it, controlPointIndex) } ?: controlPointIndex
         reduce {
             state.copy(
                 routeStart = latLng,
                 snappedRoute = newRoute,
-                hasPendingEdits = true
+                hasPendingEdits = true,
+                dirtyStart = newDirtyStart,
+                dirtyEnd = newDirtyEnd
             )
         }
     }
@@ -257,11 +287,16 @@ class MapViewModel @Inject constructor(
         val end = state.routeEnd ?: return@intent
         val prev = state.routeMarkers.lastOrNull() ?: state.routeStart ?: return@intent
         val newRoute = spliceRoute(state.snappedRoute, prev, end, listOf(prev, latLng))
+        val controlPointIndex = state.routeMarkers.size + 1
+        val newDirtyStart = state.dirtyStart?.let { minOf(it, controlPointIndex) } ?: controlPointIndex
+        val newDirtyEnd = state.dirtyEnd?.let { maxOf(it, controlPointIndex) } ?: controlPointIndex
         reduce {
             state.copy(
                 routeEnd = latLng,
                 snappedRoute = newRoute,
-                hasPendingEdits = true
+                hasPendingEdits = true,
+                dirtyStart = newDirtyStart,
+                dirtyEnd = newDirtyEnd
             )
         }
     }
@@ -292,7 +327,23 @@ class MapViewModel @Inject constructor(
         val next = if (markerIdx == markers.lastIndex) end else markers[markerIdx + 1]
         val updatedMarkers = markers.toMutableList().also { it.removeAt(markerIdx) }
         val newRoute = spliceRoute(state.snappedRoute, prev, next, listOf(prev, next))
-        val newHistory = state.editHistory + EditSnapshot(state.routeStart, state.routeEnd, state.routeMarkers, state.snappedRoute)
+        val newHistory = state.editHistory + EditSnapshot(
+            state.routeStart,
+            state.routeEnd,
+            state.routeMarkers,
+            state.snappedRoute,
+            state.dirtyStart,
+            state.dirtyEnd
+        )
+        val controlPointIndex = markerIdx
+        val adjustedStart = state.dirtyStart?.let { ds ->
+            val shifted = if (ds > markerIdx + 1) ds - 1 else ds
+            minOf(shifted, controlPointIndex)
+        } ?: controlPointIndex
+        val adjustedEnd = state.dirtyEnd?.let { de ->
+            val shifted = if (de >= markerIdx + 1) de - 1 else de
+            maxOf(shifted, controlPointIndex + 1)
+        } ?: (controlPointIndex + 1)
         reduce {
             state.copy(
                 routeMarkers = updatedMarkers,
@@ -300,7 +351,9 @@ class MapViewModel @Inject constructor(
                 selectedSegmentIndex = -1,
                 showDeleteSegmentDialog = false,
                 hasPendingEdits = true,
-                editHistory = newHistory
+                editHistory = newHistory,
+                dirtyStart = adjustedStart.coerceIn(0, updatedMarkers.size + 1),
+                dirtyEnd = adjustedEnd.coerceIn(0, updatedMarkers.size + 1)
             )
         }
     }
@@ -313,19 +366,31 @@ class MapViewModel @Inject constructor(
     /** 지도 탭: 선택된 마커를 해당 위치로 이동 후 해당 구간만 재탐색 */
     fun onMapTapped(latLng: LatLng) = intent {
         val idx = state.selectedMarkerIndex
-        val newHistory = state.editHistory + EditSnapshot(state.routeStart, state.routeEnd, state.routeMarkers, state.snappedRoute)
+        val newHistory = state.editHistory + EditSnapshot(
+            state.routeStart,
+            state.routeEnd,
+            state.routeMarkers,
+            state.snappedRoute,
+            state.dirtyStart,
+            state.dirtyEnd
+        )
         when (idx) {
             -2 -> {
                 val start = state.routeStart ?: return@intent
                 val next = state.routeMarkers.firstOrNull() ?: state.routeEnd ?: return@intent
                 val newRoute = spliceRoute(state.snappedRoute, start, next, listOf(latLng, next))
+                val controlPointIndex = 0
+                val newDirtyStart = state.dirtyStart?.let { minOf(it, controlPointIndex) } ?: controlPointIndex
+                val newDirtyEnd = state.dirtyEnd?.let { maxOf(it, controlPointIndex) } ?: controlPointIndex
                 reduce {
                     state.copy(
                         routeStart = latLng,
                         snappedRoute = newRoute,
                         selectedMarkerIndex = -1,
                         hasPendingEdits = true,
-                        editHistory = newHistory
+                        editHistory = newHistory,
+                        dirtyStart = newDirtyStart,
+                        dirtyEnd = newDirtyEnd
                     )
                 }
             }
@@ -333,13 +398,18 @@ class MapViewModel @Inject constructor(
                 val end = state.routeEnd ?: return@intent
                 val prev = state.routeMarkers.lastOrNull() ?: state.routeStart ?: return@intent
                 val newRoute = spliceRoute(state.snappedRoute, prev, end, listOf(prev, latLng))
+                val controlPointIndex = state.routeMarkers.size + 1
+                val newDirtyStart = state.dirtyStart?.let { minOf(it, controlPointIndex) } ?: controlPointIndex
+                val newDirtyEnd = state.dirtyEnd?.let { maxOf(it, controlPointIndex) } ?: controlPointIndex
                 reduce {
                     state.copy(
                         routeEnd = latLng,
                         snappedRoute = newRoute,
                         selectedMarkerIndex = -1,
                         hasPendingEdits = true,
-                        editHistory = newHistory
+                        editHistory = newHistory,
+                        dirtyStart = newDirtyStart,
+                        dirtyEnd = newDirtyEnd
                     )
                 }
             }
@@ -352,13 +422,18 @@ class MapViewModel @Inject constructor(
                 val prev = if (idx == 0) start else updatedMarkers[idx - 1]
                 val next = if (idx == updatedMarkers.lastIndex) end else updatedMarkers[idx + 1]
                 val newRoute = spliceRoute(state.snappedRoute, prev, next, listOf(prev, latLng, next))
+                val controlPointIndex = idx + 1
+                val newDirtyStart = state.dirtyStart?.let { minOf(it, controlPointIndex) } ?: controlPointIndex
+                val newDirtyEnd = state.dirtyEnd?.let { maxOf(it, controlPointIndex) } ?: controlPointIndex
                 reduce {
                     state.copy(
                         routeMarkers = updatedMarkers,
                         snappedRoute = newRoute,
                         selectedMarkerIndex = -1,
                         hasPendingEdits = true,
-                        editHistory = newHistory
+                        editHistory = newHistory,
+                        dirtyStart = newDirtyStart,
+                        dirtyEnd = newDirtyEnd
                     )
                 }
             }
@@ -375,7 +450,9 @@ class MapViewModel @Inject constructor(
             routeStart = state.routeStart,
             routeEnd = state.routeEnd,
             routeMarkers = state.routeMarkers,
-            snappedRoute = state.snappedRoute
+            snappedRoute = state.snappedRoute,
+            dirtyStart = state.dirtyStart,
+            dirtyEnd = state.dirtyEnd
         )
         reduce {
             state.copy(
@@ -398,7 +475,9 @@ class MapViewModel @Inject constructor(
                 editHistory = updatedHistory,
                 hasPendingEdits = updatedHistory.isNotEmpty(),
                 selectedMarkerIndex = -1,
-                selectedSegmentIndex = -1
+                selectedSegmentIndex = -1,
+                dirtyStart = lastSnapshot.dirtyStart,
+                dirtyEnd = lastSnapshot.dirtyEnd
             )
         }
     }
@@ -411,19 +490,56 @@ class MapViewModel @Inject constructor(
         if (!state.hasPendingEdits) return@intent
         val start = state.routeStart ?: return@intent
         val end = state.routeEnd ?: return@intent
-        val waypoints = listOf(start) + state.routeMarkers + listOf(end)
+        val currentMarkers = state.routeMarkers
+        val P_current = listOf(start) + currentMarkers + listOf(end)
+        
+        val dirtyStartVal = state.dirtyStart ?: 0
+        val dirtyEndVal = state.dirtyEnd ?: (P_current.size - 1)
+        
+        val startIdx = maxOf(0, dirtyStartVal - 1)
+        val endIdx = minOf(P_current.size - 1, dirtyEndVal + 1)
+        
+        val waypoints = P_current.subList(startIdx, endIdx + 1)
+        if (waypoints.size < 2) {
+            reduce {
+                state.copy(
+                    hasPendingEdits = false,
+                    dirtyStart = null,
+                    dirtyEnd = null
+                )
+            }
+            return@intent
+        }
+        
         reduce { state.copy(isProcessing = true) }
         val result = withContext(Dispatchers.IO) { snapToRoad.fromWaypoints(waypoints) }
         result.fold(
-            onSuccess = { newRoute ->
-                val newMarkers = sampleMarkers(newRoute, intervalMeters = DEFAULT_INTERVAL_METERS)
+            onSuccess = { newSubRoute ->
+                val fromPt = P_current[startIdx]
+                val toPt = P_current[endIdx]
+                
+                val fromIdx = if (startIdx == 0) 0 else indexOfClosest(state.snappedRoute, fromPt)
+                val toIdx = if (endIdx == P_current.size - 1) state.snappedRoute.size - 1 else indexOfClosest(state.snappedRoute, toPt)
+                
+                val newSnappedRoute = if (fromIdx >= 0 && toIdx >= 0 && fromIdx < toIdx) {
+                    state.snappedRoute.subList(0, fromIdx) + newSubRoute + state.snappedRoute.subList(toIdx + 1, state.snappedRoute.size)
+                } else {
+                    state.snappedRoute
+                }
+                
+                val newSubMarkers = sampleMarkers(newSubRoute, intervalMeters = DEFAULT_INTERVAL_METERS)
+                
+                val updatedMarkers = currentMarkers.subList(0, startIdx) + newSubMarkers + currentMarkers.subList(endIdx - 1, currentMarkers.size)
+                
                 reduce {
                     state.copy(
-                        snappedRoute = newRoute,
-                        routeMarkers = newMarkers,
-                        routeStart = newRoute.firstOrNull() ?: state.routeStart,
-                        routeEnd = newRoute.lastOrNull() ?: state.routeEnd,
+                        snappedRoute = newSnappedRoute,
+                        routeMarkers = updatedMarkers,
+                        routeStart = newSnappedRoute.firstOrNull() ?: state.routeStart,
+                        routeEnd = newSnappedRoute.lastOrNull() ?: state.routeEnd,
                         hasPendingEdits = false,
+                        dirtyStart = null,
+                        dirtyEnd = null,
                         editHistory = emptyList(),
                         isProcessing = false,
                         error = null
@@ -560,7 +676,9 @@ class MapViewModel @Inject constructor(
                         routeEnd = combined.last(),
                         editHistory = emptyList(),
                         isProcessing = false,
-                        error = null
+                        error = null,
+                        dirtyStart = null,
+                        dirtyEnd = null
                     )
                 }
             },
