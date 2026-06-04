@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "286008473808",
+    "project_id": "map-snap-b0438",
+    "storage_bucket": "map-snap-b0438.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:286008473808:android:6bc0200d0052a9ac6746d5",
+        "android_client_info": {
+          "package_name": "com.jason.mapsnap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAW64B88om1ErPFrakHcNz8NUF9EfZe_ag"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
