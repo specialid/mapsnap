@@ -5,13 +5,51 @@ import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Help
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -20,15 +58,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.IntOffset
-import android.graphics.PointF
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.location.LocationServices
 import com.jason.mapsnap.presentation.map.DrawingMode
@@ -41,34 +76,16 @@ import com.naver.maps.map.compose.ExperimentalNaverMapApi
 import com.naver.maps.map.compose.MapEffect
 import com.naver.maps.map.compose.MapProperties
 import com.naver.maps.map.compose.MapUiSettings
-import com.naver.maps.map.compose.NaverMap
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.key
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Icon
-import androidx.compose.foundation.gestures.detectTapGestures
 import com.naver.maps.map.compose.Marker as NaverMarker
+import com.naver.maps.map.compose.NaverMap
 import com.naver.maps.map.compose.PathOverlay
 import com.naver.maps.map.compose.rememberCameraPositionState
 import com.naver.maps.map.compose.rememberMarkerState
 import com.naver.maps.map.overlay.OverlayImage
 import org.orbitmvi.orbit.compose.collectAsState
 import org.orbitmvi.orbit.compose.collectSideEffect
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
+import android.graphics.PointF
+import com.jason.mapsnap.BuildConfig
 
 private val SeoulCityHall = LatLng(37.5666, 126.9784)
 
@@ -165,8 +182,6 @@ private fun markerIcon(type: MarkerType, label: String?, selected: Boolean): Ove
     return OverlayImage.fromBitmap(bitmap)
 }
 
-
-
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalNaverMapApi::class)
 @Composable
@@ -177,6 +192,10 @@ fun MapScreen(
     val context = LocalContext.current
     val cameraPositionState = rememberCameraPositionState()
     var naverMap by remember { mutableStateOf<com.naver.maps.map.NaverMap?>(null) }
+
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var showHelpDialog by remember { mutableStateOf(false) }
+    var showInfoDialog by remember { mutableStateOf(false) }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -236,7 +255,7 @@ fun MapScreen(
         NaverMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
-            properties = MapProperties(),
+            properties = MapProperties(mapType = state.mapType),
             uiSettings = MapUiSettings(
                 isScrollGesturesEnabled = !isDrawing,
                 isZoomGesturesEnabled = !isDrawing,
@@ -446,12 +465,13 @@ fun MapScreen(
             }
         }
 
-        // API 호출 현황 top-right overlay counter (glassmorphism style)
+        // Custom Glassmorphic Top App Bar
         Card(
             modifier = Modifier
-                .align(Alignment.TopEnd)
+                .align(Alignment.TopCenter)
                 .statusBarsPadding()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = Color(0xCC1F1F23)
@@ -459,61 +479,325 @@ fun MapScreen(
             border = BorderStroke(1.dp, Color(0x33FFFFFF)),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(12.dp),
-                horizontalAlignment = Alignment.Start
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "API 호출 현황",
+                    text = "MapSnap",
                     color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(bottom = 6.dp)
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
                 )
-                Row(
-                    modifier = Modifier.padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Box {
+                    var showMenu by remember { mutableStateOf(false) }
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Menu",
+                            tint = Color.White
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("설정") },
+                            onClick = {
+                                showMenu = false
+                                showSettingsDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("도움말") },
+                            onClick = {
+                                showMenu = false
+                                showHelpDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.Help, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("정보") },
+                            onClick = {
+                                showMenu = false
+                                showInfoDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Settings Dialog
+        if (showSettingsDialog) {
+            var tempInterval by remember { mutableStateOf(state.markerIntervalMeters) }
+            var tempEpsilonDrawn by remember { mutableStateOf(state.epsilonDrawnDeg) }
+            var tempEpsilonRoute by remember { mutableStateOf(state.epsilonRouteDeg) }
+            
+            AlertDialog(
+                onDismissRequest = { showSettingsDialog = false },
+                title = { Text("설정", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Column {
+                            Text("마커 생성 간격: ${tempInterval.toInt()}m", fontSize = 14.sp)
+                            Slider(
+                                value = tempInterval.toFloat(),
+                                onValueChange = { newValue ->
+                                    tempInterval = (Math.round(newValue / 10.0) * 10.0).coerceIn(30.0, 150.0)
+                                },
+                                valueRange = 30f..150f,
+                                steps = 11
+                            )
+                        }
+                        Column {
+                            Text(String.format("그리기 단순화 강도: %.6f°", tempEpsilonDrawn), fontSize = 14.sp)
+                            Slider(
+                                value = tempEpsilonDrawn.toFloat(),
+                                onValueChange = { tempEpsilonDrawn = it.toDouble() },
+                                valueRange = 0.00005f..0.0003f
+                            )
+                        }
+                        Column {
+                            Text(String.format("스냅 경로 단순화 강도: %.6f°", tempEpsilonRoute), fontSize = 14.sp)
+                            Slider(
+                                value = tempEpsilonRoute.toFloat(),
+                                onValueChange = { tempEpsilonRoute = it.toDouble() },
+                                valueRange = 0.00002f..0.00015f
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                tempInterval = 80.0
+                                tempEpsilonDrawn = 0.000135
+                                tempEpsilonRoute = 0.000072
+                            },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("기본값 복원")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.onUpdateSettings(tempInterval, tempEpsilonDrawn, tempEpsilonRoute)
+                        showSettingsDialog = false
+                    }) {
+                        Text("적용")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSettingsDialog = false }) {
+                        Text("취소")
+                    }
+                }
+            )
+        }
+
+        // Help Dialog
+        if (showHelpDialog) {
+            AlertDialog(
+                onDismissRequest = { showHelpDialog = false },
+                title = { Text("도움말", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("• 경로 그리기: 화면의 그리기 버튼을 누르고 손가락으로 지도 위에 선을 그리면 보행자 도로로 자동 스냅됩니다.", fontSize = 14.sp)
+                        Text("• 마커 이동: 편집 모드(DONE)에서 마커를 탭한 후, 주황색 드래그 핸들을 눌러서 끌면 위치를 수정할 수 있습니다.", fontSize = 14.sp)
+                        Text("• 출발(S) 및 도착(G) 마커: 양 끝 마커를 드래그하여 이동시키면 경로가 그에 맞게 단축되거나 수정됩니다.", fontSize = 14.sp)
+                        Text("• 마커/구간 삭제: 선택된 중간 마커를 다시 탭하거나 위쪽 휴지통 아이콘을 누르면 마커가 삭제되며, 두 마커 사이의 파란색 경로(구간)를 탭하여 삭제할 수도 있습니다.", fontSize = 14.sp)
+                        Text("• 이어 그리기: [+] 버튼을 누르면 기존 경로 끝에서부터 이어서 선을 그릴 수 있습니다.", fontSize = 14.sp)
+                        Text("• 일괄 적용: 마커를 수정한 후 [적용] 버튼을 눌러 T-Map 실도로 스냅을 최종 업데이트합니다.", fontSize = 14.sp)
+                        Text("• 실행 취소(Undo): 마커 조작 실수를 했을 때 [실행 취소] 버튼을 통해 이전 상태로 되돌릴 수 있습니다.", fontSize = 14.sp)
+                        Text("• GPX 내보내기: 우측 [GPX] 버튼으로 경로를 gpx 파일로 스마트폰에 저장할 수 있습니다.", fontSize = 14.sp)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showHelpDialog = false }) {
+                        Text("확인")
+                    }
+                }
+            )
+        }
+
+        // Info Dialog
+        if (showInfoDialog) {
+            AlertDialog(
+                onDismissRequest = { showInfoDialog = false },
+                title = { Text("정보", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("MapSnap", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("버전 ${BuildConfig.VERSION_CODE}", fontSize = 14.sp)
+                        Text("보행자 중심 도로 스냅 및 편집 애플리케이션", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text("Powered by T-Map API & Naver Map SDK", fontSize = 12.sp, color = Color.Gray)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showInfoDialog = false }) {
+                        Text("확인")
+                    }
+                }
+            )
+        }
+
+        // Glassmorphic Path Statistics Card
+        val distanceStr = if (state.totalDistanceMeters >= 1000) {
+            String.format("%.2f km", state.totalDistanceMeters / 1000.0)
+        } else {
+            String.format("%d m", state.totalDistanceMeters.toInt())
+        }
+        val estimatedTimeMin = (state.totalDistanceMeters / 66.67).toInt()
+        val timeStr = if (estimatedTimeMin > 60) {
+            "${estimatedTimeMin / 60}시간 ${estimatedTimeMin % 60}분"
+        } else {
+            "${estimatedTimeMin}분"
+        }
+
+        AnimatedVisibility(
+            visible = state.drawingMode == DrawingMode.DONE && state.snappedRoute.isNotEmpty(),
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .offset(y = 80.dp) // Below Top App Bar
+                .padding(16.dp)
+        ) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xCC1F1F23)
+                ),
+                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalAlignment = Alignment.Start
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .background(Color(0xFF2196F3), shape = CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "T-Map API: ",
-                        color = Color(0xFFB0BEC5),
-                        fontSize = 11.sp
-                    )
-                    Text(
-                        text = "${state.tmapApiCallCount} 회",
+                        text = "경로 통계",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 6.dp)
                     )
-                }
-                Row(
-                    modifier = Modifier.padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .background(Color(0xFF4CAF50), shape = CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Naver Map API: ",
+                        text = "총 거리: $distanceStr",
                         color = Color(0xFFB0BEC5),
-                        fontSize = 11.sp
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = "${state.naverMapApiCallCount} 회",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp
+                        text = "예상 시간: $timeStr",
+                        color = Color(0xFFB0BEC5),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "중간 마커 수: ${state.routeMarkers.size}개",
+                        color = Color(0xFFB0BEC5),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
+            }
+        }
+
+        // Right Side Column (API Counter Card + Map Type Toggle FAB)
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(y = 80.dp)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (com.jason.mapsnap.BuildConfig.DEBUG) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xCC1F1F23)
+                    ),
+                    border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "API 호출 현황",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        Row(
+                            modifier = Modifier.padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(Color(0xFF2196F3), shape = CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "T-Map API: ",
+                                color = Color(0xFFB0BEC5),
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = "${state.tmapApiCallCount} 회",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(Color(0xFF4CAF50), shape = CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Naver Map API: ",
+                                color = Color(0xFFB0BEC5),
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = "${state.naverMapApiCallCount} 회",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Map Type Toggle FAB
+            FloatingActionButton(
+                onClick = { viewModel.onToggleMapType() },
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Layers,
+                    contentDescription = "지도 타입 변경",
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                )
             }
         }
 

@@ -10,6 +10,7 @@ import com.jason.mapsnap.domain.usecase.ExportGpxUseCase
 import com.jason.mapsnap.domain.usecase.SimplifyPathUseCase
 import com.jason.mapsnap.domain.usecase.SnapToRoadUseCase
 import com.naver.maps.geometry.LatLng
+import com.naver.maps.map.compose.MapType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -61,6 +62,25 @@ class MapViewModel @Inject constructor(
     fun onNaverMapLoaded() = intent {
         apiCallTracker.incrementNaver()
         Log.d("MapViewModel", "Naver Map API (Mobile Dynamic Map) 로딩 완료")
+    }
+
+    fun onToggleMapType() = intent {
+        val nextType = if (state.mapType == MapType.Basic) {
+            MapType.Satellite
+        } else {
+            MapType.Basic
+        }
+        reduce { state.copy(mapType = nextType) }
+    }
+
+    fun onUpdateSettings(interval: Double, epsilonDrawn: Double, epsilonRoute: Double) = intent {
+        reduce {
+            state.copy(
+                markerIntervalMeters = interval,
+                epsilonDrawnDeg = epsilonDrawn,
+                epsilonRouteDeg = epsilonRoute
+            )
+        }
     }
 
     fun onLocationPermissionResult(granted: Boolean) {
@@ -512,7 +532,7 @@ class MapViewModel @Inject constructor(
         }
         
         reduce { state.copy(isProcessing = true) }
-        val result = withContext(Dispatchers.IO) { snapToRoad.fromWaypoints(waypoints) }
+        val result = withContext(Dispatchers.IO) { snapToRoad.fromWaypoints(waypoints, state.epsilonRouteDeg) }
         result.fold(
             onSuccess = { newSubRoute ->
                 val fromPt = P_current[startIdx]
@@ -527,7 +547,7 @@ class MapViewModel @Inject constructor(
                     state.snappedRoute
                 }
                 
-                val newSubMarkers = sampleMarkers(newSubRoute, intervalMeters = DEFAULT_INTERVAL_METERS)
+                val newSubMarkers = sampleMarkers(newSubRoute, intervalMeters = state.markerIntervalMeters)
                 
                 val updatedMarkers = currentMarkers.subList(0, startIdx) + newSubMarkers + currentMarkers.subList(endIdx - 1, currentMarkers.size)
                 
@@ -637,7 +657,7 @@ class MapViewModel @Inject constructor(
         val points = if (isLoop) basePoints + basePoints.first() else basePoints
 
         // 1단계: RDP 직선화 → 즉시 오버레이에 반영하여 사용자에게 피드백
-        val simplified = withContext(Dispatchers.Default) { simplifyPath(points) }
+        val simplified = withContext(Dispatchers.Default) { simplifyPath(points, state.epsilonDrawnDeg) }
         reduce {
             state.copy(
                 drawingMode = DrawingMode.PROCESSING,
@@ -648,7 +668,7 @@ class MapViewModel @Inject constructor(
         }
 
         // 2단계: 직선화된 경로를 T-Map에 전달하여 실도로 스냅
-        val result = withContext(Dispatchers.IO) { snapToRoad(points) }
+        val result = withContext(Dispatchers.IO) { snapToRoad(points, state.epsilonDrawnDeg, state.epsilonRouteDeg) }
 
         Log.d("SnapDebug", "snapToRoad result: isSuccess=${result.isSuccess}, error=${result.exceptionOrNull()?.message}")
 
@@ -663,7 +683,7 @@ class MapViewModel @Inject constructor(
                     newRoute
                 }
 
-                val markers = sampleMarkers(combined, intervalMeters = DEFAULT_INTERVAL_METERS)
+                val markers = sampleMarkers(combined, intervalMeters = state.markerIntervalMeters)
                 reduce {
                     state.copy(
                         drawingMode = DrawingMode.DONE,

@@ -2,6 +2,11 @@ package com.jason.mapsnap.presentation.map
 
 import androidx.compose.runtime.Immutable
 import com.naver.maps.geometry.LatLng
+import com.naver.maps.map.compose.MapType
+import kotlin.math.asin
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 @Immutable
 data class EditSnapshot(
@@ -36,9 +41,35 @@ data class MapState(
     val hasPendingEdits: Boolean = false,
     val editHistory: List<EditSnapshot> = emptyList(),
     val dirtyStart: Int? = null,
-    val dirtyEnd: Int? = null
+    val dirtyEnd: Int? = null,
+    val mapType: MapType = MapType.Basic,
+    val markerIntervalMeters: Double = 80.0,
+    val epsilonDrawnDeg: Double = 0.000135,
+    val epsilonRouteDeg: Double = 0.000072
 ) {
     val canUndo: Boolean get() = editHistory.isNotEmpty()
+    
+    val totalDistanceMeters: Double get() = computeTotalDistance(snappedRoute)
+}
+
+private fun computeTotalDistance(route: List<LatLng>): Double {
+    if (route.size < 2) return 0.0
+    var dist = 0.0
+    for (i in 0 until route.size - 1) {
+        dist += haversineMeters(route[i], route[i + 1])
+    }
+    return dist
+}
+
+private fun haversineMeters(a: LatLng, b: LatLng): Double {
+    val R = 6_371_000.0
+    val dLat = Math.toRadians(b.latitude - a.latitude)
+    val dLon = Math.toRadians(b.longitude - a.longitude)
+    val sinLat = sin(dLat / 2)
+    val sinLon = sin(dLon / 2)
+    val c = sinLat * sinLat +
+            cos(Math.toRadians(a.latitude)) * cos(Math.toRadians(b.latitude)) * sinLon * sinLon
+    return 2 * R * asin(sqrt(c))
 }
 
 enum class DrawingMode { IDLE, DRAWING, PROCESSING, DONE }

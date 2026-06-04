@@ -19,12 +19,16 @@ class SnapToRoadUseCase @Inject constructor(
     // chunkSize=7 기준: 19 → 3청크, 13 → 2청크, 7 → 1청크(청크 연결 없음)
     private val maxWaypoints = 19
 
-    suspend operator fun invoke(points: List<LatLng>): Result<List<LatLng>> {
+    suspend operator fun invoke(
+        points: List<LatLng>,
+        epsilonDrawnDeg: Double = SimplifyPathUseCase.EPSILON_DRAWN_DEG,
+        epsilonRouteDeg: Double = SimplifyPathUseCase.EPSILON_ROUTE_DEG
+    ): Result<List<LatLng>> {
         if (points.size < 2) {
             return Result.failure(IllegalArgumentException("최소 2개 이상의 포인트가 필요합니다"))
         }
 
-        val simplified = withContext(Dispatchers.Default) { simplifyPath(points) }
+        val simplified = withContext(Dispatchers.Default) { simplifyPath(points, epsilonDrawnDeg) }
         if (simplified.size < 2) {
             return Result.failure(IllegalStateException("경로 단순화 후 포인트가 부족합니다"))
         }
@@ -43,7 +47,7 @@ class SnapToRoadUseCase @Inject constructor(
         // T-Map 결과의 미세 우회 구간 제거 — 도로 꺾임은 보존, 불필요한 곡선만 정리
         return routeResult.map { route ->
             withContext(Dispatchers.Default) {
-                simplifyPath(route, SimplifyPathUseCase.EPSILON_ROUTE_DEG)
+                simplifyPath(route, epsilonRouteDeg)
             }
         }
     }
@@ -52,14 +56,17 @@ class SnapToRoadUseCase @Inject constructor(
      * 마커 편집 후 재라우팅 전용: RDP·샘플링 없이 waypoints를 그대로 T-Map에 전달
      * 이미 정제된 좌표(routeStart + 편집된 마커들 + routeEnd)를 받는다
      */
-    suspend fun fromWaypoints(waypoints: List<LatLng>): Result<List<LatLng>> {
+    suspend fun fromWaypoints(
+        waypoints: List<LatLng>,
+        epsilonRouteDeg: Double = SimplifyPathUseCase.EPSILON_ROUTE_DEG
+    ): Result<List<LatLng>> {
         if (waypoints.size < 2) {
             return Result.failure(IllegalArgumentException("최소 2개 이상의 포인트가 필요합니다"))
         }
         val routeResult = repository.getPedestrianRoute(waypoints)
         return routeResult.map { route ->
             withContext(Dispatchers.Default) {
-                simplifyPath(route, SimplifyPathUseCase.EPSILON_ROUTE_DEG)
+                simplifyPath(route, epsilonRouteDeg)
             }
         }
     }
