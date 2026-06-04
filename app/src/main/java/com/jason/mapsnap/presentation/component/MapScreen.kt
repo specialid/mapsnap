@@ -264,7 +264,7 @@ fun MapScreen(
                                 coords = seg,
                                 color = if (isSelected) Color(0xFFE65100) else Color(0xFF2196F3),
                                 outlineColor = if (isSelected) Color(0xFFBF360C) else Color(0xFF0D47A1),
-                                width = if (isSelected) 10.dp else 8.dp,
+                                width = if (isSelected) 7.dp else 5.dp,
                                 outlineWidth = 2.dp,
                                 onClick = {
                                     viewModel.onSegmentTapped(segIdx)

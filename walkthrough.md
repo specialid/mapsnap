@@ -279,5 +279,6 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `8ff0213` | feat: 중간 마커 직접 삭제 및 T-Map 국소 재라우팅 연동 기능 추가 |
 | `da8aa6a` | feat: 로컬 경로 업데이트 및 배치 재라우팅 (Apply edits) 일괄 적용 기능 구현 |
 | `abe1464` | feat: 마커 편집 단계별 실행 취소 (Undo) 기능 구현 |
-| `a8b9c1d` | feat: 국소 마커 재탐색(Local Rerouting) 및 마커 보존 기능 구현 |
+| `cf6f3fb` | feat: 국소 마커 재탐색(Local Rerouting) 및 마커 보존 기능 구현 |
+| `002508c` | fix: AndroidManifest.xml에 앱 런처 아이콘 지정 및 아이콘/라인 두께 UI 개선 |
 

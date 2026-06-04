@@ -112,7 +112,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawStrokePath(
     drawPath(
         path = path,
         color = Color.White.copy(alpha = if (freehand) 0.5f else 0.8f),
-        style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
     )
     // 내선 — 직선화 후엔 주황색, 루프면 초록색으로 구분
     val lineColor = when {
@@ -123,7 +123,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawStrokePath(
     drawPath(
         path = path,
         color = lineColor,
-        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
     )
 
     // 직선화 경로의 꺾임 지점(waypoint) 표시
