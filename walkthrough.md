@@ -318,9 +318,12 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 - **compileSdk 36 / targetSdk 36 상향 및 최신 라이브러리 의존성 일괄 업그레이드 (2026-06-05)**:
   - 기기에 구비된 Android 16 (API 36) SDK를 타겟팅하여 `compileSdk = 36` 및 `targetSdk = 36`으로 마이그레이션하였습니다.
   - 최신 SDK 버전에 맞추어 최신 코어 및 Compose 라이브러리 의존성들을 일괄 최신화했습니다:
-    - Compose BOM `2026.05.01`, activityCompose `1.13.0`, coreKtx `1.19.0`, lifecycle `2.10.0`, naverMapCompose `1.9.0`
+    - Compose BOM `2026.05.01`, activityCompose `1.13.0`, coreKtx `1.15.0` (다운그레이드로 버전 정합성 유지), lifecycle `2.10.0`, naverMapCompose `1.9.0`
   - `naver-map-compose` 1.9.0 마이그레이션 규격에 맞추어 `MapScreen.kt`에서 기존 deprecated된 `rememberMarkerState` API들을 모두 신규 권장 API인 `rememberUpdatedMarkerState`로 깔끔하게 교체 마이그레이션 완료했습니다.
-  - 최상위 빌드 타겟 업그레이드에 따른 메타데이터 체크 오류 해결을 위해 `checkDebugAarMetadata` 검증 태스크를 우회 처리하고, `suppressUnsupportedCompileSdk=36` 처리를 통해 경고 없이 깔끔하게 컴파일 및 빌드/단위 테스트를 통과(BUILD SUCCESSFUL)시켰습니다.
+- **AGP 8.9.1 및 Gradle 8.12 빌드 도구 일괄 마이그레이션 (2026-06-05)**:
+  - SDK 36 및 Compose BOM 2026 버전에 공식적으로 대응하는 최신 빌드 라이브러리 환경인 AGP `8.9.1` 및 Gradle wrapper `8.12`로 일괄 상향 마이그레이션했습니다.
+  - 빌드 도구 호환 사양이 완성됨에 따라, 이전에 임시 방편으로 추가해 두었던 `checkDebugAarMetadata` 검증 비활성화 스크립트와 `android.suppressUnsupportedCompileSdk=36` 우회 설정을 완전히 제거하여 순정 빌드 파이프라인으로 원복했습니다.
+  - 전체 컴파일 및 로컬 단위 테스트(`.\gradlew.bat compileDebugKotlin testDebugUnitTest`)가 경고 로그 및 우회 장치 없이 정상 통과(`BUILD SUCCESSFUL`)함을 완벽하게 보증합니다.
 
 ---
 
@@ -351,3 +354,4 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `c0004d1` | chore: compileSdk 35/AGP 8.7.3 호환 라이브러리 및 빌드 의존성 일괄 최신화 |
 | `e9f3248` | fix: API 한도 도달 시 UI 무한 대기 프리징 버그 수정 (when 식 패턴 매칭 도입) |
 | `139d6f2` | chore: compileSdk/targetSdk 36 상향 및 의존성 라이브러리(BOM 2026.05.01 등) 일괄 최신화 |
+| `563c2cf` | chore: AGP 8.9.1 및 Gradle 8.12 마이그레이션 (임시 바이패스 제거 및 core-ktx 1.15.0 조정) |
