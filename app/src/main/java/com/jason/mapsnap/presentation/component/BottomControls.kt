@@ -84,7 +84,7 @@ fun BottomControls(
                         Text(
                             text = "원하는 경로를 그려보세요",
                             color = Color.White,
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Medium
                         )
                         Button(
@@ -92,7 +92,9 @@ fun BottomControls(
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
                                 contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
+                            ),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(36.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
@@ -159,7 +161,7 @@ fun BottomControls(
                 }
                 DrawingMode.PROCESSING -> {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().height(36.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -172,7 +174,7 @@ fun BottomControls(
                         Text(
                             text = "도로 스냅 경로 계산 중...",
                             color = Color.White,
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
