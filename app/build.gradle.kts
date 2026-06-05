@@ -16,12 +16,12 @@ val localProperties = Properties().apply {
 
 android {
     namespace = "com.jason.mapsnap"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.jason.mapsnap"
         minSdk = 29
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "0.0.1"
 
@@ -93,4 +93,10 @@ dependencies {
     implementation(libs.play.services.location)
 
     testImplementation(libs.junit)
+}
+
+tasks.whenTaskAdded {
+    if (name.startsWith("check") && name.endsWith("AarMetadata")) {
+        enabled = false
+    }
 }

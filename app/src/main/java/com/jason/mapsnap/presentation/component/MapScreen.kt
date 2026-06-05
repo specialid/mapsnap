@@ -91,7 +91,7 @@ import com.naver.maps.map.compose.Marker as NaverMarker
 import com.naver.maps.map.compose.NaverMap
 import com.naver.maps.map.compose.PathOverlay
 import com.naver.maps.map.compose.rememberCameraPositionState
-import com.naver.maps.map.compose.rememberMarkerState
+import com.naver.maps.map.compose.rememberUpdatedMarkerState
 import com.naver.maps.map.overlay.OverlayImage
 import org.orbitmvi.orbit.compose.collectAsState
 import org.orbitmvi.orbit.compose.collectSideEffect
@@ -395,7 +395,7 @@ fun MapScreen(
             state.routeStart?.let { pos ->
                 val isSelected = state.selectedMarkerIndex == -2
                 key("start_marker") {
-                    val markerState = rememberMarkerState(position = pos)
+                    val markerState = rememberUpdatedMarkerState(position = pos)
                     LaunchedEffect(pos) {
                         markerState.position = pos
                     }
@@ -415,7 +415,7 @@ fun MapScreen(
             state.routeEnd?.let { pos ->
                 val isSelected = state.selectedMarkerIndex == -3
                 key("end_marker") {
-                    val markerState = rememberMarkerState(position = pos)
+                    val markerState = rememberUpdatedMarkerState(position = pos)
                     LaunchedEffect(pos) {
                         markerState.position = pos
                     }
@@ -435,7 +435,7 @@ fun MapScreen(
             state.routeMarkers.forEachIndexed { index, pos ->
                 val isSelected = state.selectedMarkerIndex == index
                 key(index) {
-                    val markerState = rememberMarkerState(position = pos)
+                    val markerState = rememberUpdatedMarkerState(position = pos)
                     LaunchedEffect(pos) {
                         markerState.position = pos
                     }
