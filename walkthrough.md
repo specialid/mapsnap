@@ -140,7 +140,7 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 ### 로컬 업데이트 및 일괄 적용 (Apply Edits)
 
 - **로컬 즉시 반영 및 API 지연 호출**:
-  - 기존의 마커 드래그, 시작/끝 마커 드래그, 마커/세그먼트 삭제 시 실시간으로 API를 호출하던 디바운스 방식(`_rerouteSignal`)을 제거했습니다.
+  - 기존의 마커 드래그, 시작/끝 마커 드래그, 마커/세그먼트 삭제 시 실시간으로 API를 호출하던 디바이스 방식(`_rerouteSignal`)을 제거했습니다.
   - 대신 편집이 일어날 때마다 `spliceRoute` 함수를 사용하여 로컬에서 `snappedRoute`와 마커 좌표만 즉시 업데이트하여 끊김 없는 드래그/편집 경험을 제공합니다.
   - 편집 발생 시 `hasPendingEdits` 상태를 `true`로 설정합니다.
 - **배치 재라우팅 (Batch Rerouting)**:
@@ -262,8 +262,8 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `MapState` | DrawingMode, drawnPoints, simplifiedPoints, snappedRoute, routeMarkers, API 카운트 등 |
 | `MapViewModel` | 모든 인텐트, sampleMarkers, API 카운트 Flow 수집, GPX 저장 액션 처리 |
 | `DrawingOverlay` | Canvas 기반 손그림 · 직선화 오버레이, 스냅존 원 |
-| `MapScreen` | NaverMap Compose, segmentize, PathOverlay/Marker 렌더링, API 카운터 대시보드 오버레이, AlertDialog |
-| `BottomControls` | 그리기 / 스냅 / 이어 그리기 / 지우기 / GPX 내보내기 FAB |
+| `MapScreen` | NaverMap Compose, Navigation Drawer 및 햄버거 메뉴 버튼, API 카운터 대시보드 오버레이, AlertDialog |
+| `BottomControls` | 통합 하단 조작계 카드 컴포저블 (거리, 예상 시간, 마커 수 요약 및 상태별 버튼 제어) |
 
 ---
 
@@ -278,6 +278,21 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
   - Coroutines의 `await()`를 사용하여 Firebase의 비동기 리스너 호출을 일시중단(suspend) 함수 스타일로 래핑하고, MVI 스레딩 원칙에 따라 백그라운드 IO 디스패처(`Dispatchers.IO`) 상에서 동작하도록 보장하였습니다.
 - **오프라인 지속성**:
   - 오프라인 상태에서도 캐시를 통해 앱이 비정상 종료 없이 동작할 수 있도록 로컬 레벨 영속성 고려.
+
+---
+
+## UI/UX 개선 (상단 드로어 및 하단 통합 조작 카드)
+
+- **상단 공간의 극대화**:
+  - 기존에 화면 상단을 가득 채우던 글래스모피즘 Card 상단 바를 전면 삭제했습니다.
+  - 좌측 상단에 단독으로 위치한 플로팅 햄버거 메뉴 버튼(`Icons.Default.Menu`)을 제공하며, 클릭 시 안드로이드 표준 `ModalNavigationDrawer`가 열려 설정, 도움말, 정보를 띄울 수 있도록 개편했습니다.
+- **하단 제어 기능 통합**:
+  - 좌측 중간에 떠 있던 `경로 통계 카드` 및 여러 군데 분산되어 배치되었던 FAB(그리기, 스냅, 이어 그리기, GPX 저장, 다시 그리기, 지우기, 실행 취소 등)를 하나의 일관된 **하단 통합 조작 카드(BottomControlsCard)**로 완전히 정리했습니다.
+  - **상태 기반 UI 흐름 제공**:
+    - **그리기 전(IDLE)**: "원하는 경로를 그려보세요" 메시지 + `[그리기 시작]` 버튼.
+    - **그리는 중(DRAWING)**: "지도 위에 선을 그려주세요" 메시지 + `[취소]` & `[완료]` 버튼.
+    - **처리 중(PROCESSING)**: 원형 인디케이터 + "도로 스냅 경로 계산 중..." 텍스트.
+    - **생성 완료(DONE)**: 수평 구조로 정렬된 경로 통계(거리, 예상 시간, 마커 수)와 주요 작업(수정 완료 시 `[적용]`, 평상시 `[이어 그리기]` + `[GPX 저장]`) 및 보조 텍스트 버튼(`[실행 취소]`, `[다시 그리기]`, `[지우기]`)을 단일 카드 내에 집약하여 뛰어난 터치 사용성과 개방적인 시각 경험을 안겨줍니다.
 
 ---
 
@@ -300,5 +315,5 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `cf6f3fb` | feat: 국소 마커 재탐색(Local Rerouting) 및 마커 보존 기능 구현 |
 | `002508c` | fix: AndroidManifest.xml에 앱 런처 아이콘 지정 및 아이콘/라인 두께 UI 개선 |
 | `f2e3a89` | feat: Firebase RTDB 기반 기기 고유 식별자 해싱 및 일일 API 호출 추적 레포지토리 구축 |
-
-
+| `a4accdd` | feat: Firebase RTDB 기반 기기 식별자 API 일일 호출 제한 및 광고 충전 기능 구현 |
+| `6e9b8f0` | feat: 상단 햄버거 드로어 도입 및 하단 통합 조작계(거리/시간 통계 통합) UI/UX 전면 개편 |

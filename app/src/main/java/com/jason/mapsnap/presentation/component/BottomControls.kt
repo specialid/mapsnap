@@ -1,41 +1,43 @@
 package com.jason.mapsnap.presentation.component
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.jason.mapsnap.presentation.map.DrawingMode
 
 @Composable
@@ -43,6 +45,8 @@ fun BottomControls(
     drawingMode: DrawingMode,
     hasPendingEdits: Boolean,
     canUndo: Boolean,
+    totalDistanceMeters: Double,
+    routeMarkersCount: Int,
     onApplyEdits: () -> Unit,
     onUndo: () -> Unit,
     onDrawToggle: () -> Unit,
@@ -51,147 +55,306 @@ fun BottomControls(
     onExportGpx: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var isExpanded by remember { mutableStateOf(false) }
-
-    // Reset expanded state if we leave the DONE mode (e.g. clear, redraw)
-    if (drawingMode != DrawingMode.DONE) {
-        isExpanded = false
-    }
-
-    Row(
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xCC1F1F23)
+        ),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, Color(0x33FFFFFF)),
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Bottom
+            .padding(16.dp)
     ) {
-        // Left Action Group: More FAB + Speed Dial Stack
         Column(
-            horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AnimatedVisibility(
-                visible = drawingMode == DrawingMode.DONE && isExpanded,
-                enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
-                exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom)
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.Start,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (canUndo) {
-                        ExtendedFloatingActionButton(
-                            onClick = {
-                                onUndo()
-                                isExpanded = false
-                            },
-                            icon = { Icon(Icons.Default.Undo, contentDescription = null) },
-                            text = { Text("실행 취소") },
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    }
-                    ExtendedFloatingActionButton(
-                        onClick = {
-                            onExportGpx()
-                            isExpanded = false
-                        },
-                        icon = { Icon(Icons.Default.Share, contentDescription = null) },
-                        text = { Text("GPX") },
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    )
-                    ExtendedFloatingActionButton(
-                        onClick = {
-                            onClear()
-                            isExpanded = false
-                        },
-                        icon = { Icon(Icons.Default.Clear, contentDescription = null) },
-                        text = { Text("지우기") },
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = drawingMode == DrawingMode.DONE,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                FloatingActionButton(
-                    onClick = { isExpanded = !isExpanded },
-                    containerColor = if (isExpanded) {
-                        MaterialTheme.colorScheme.tertiary
-                    } else {
-                        MaterialTheme.colorScheme.primaryContainer
-                    }
-                ) {
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.Close else Icons.Default.MoreVert,
-                        contentDescription = "더보기"
-                    )
-                }
-            }
-        }
-
-        // Right Action Group: [다시 그리기/완료/스냅] + [+] (이어 그리기)
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // [적용] (Apply) Button
-            AnimatedVisibility(
-                visible = drawingMode == DrawingMode.DONE && hasPendingEdits,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                ExtendedFloatingActionButton(
-                    onClick = onApplyEdits,
-                    icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-                    text = { Text("적용") },
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            }
-
-            // [+] (이어 그리기) Button
-            AnimatedVisibility(
-                visible = drawingMode == DrawingMode.DONE,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                FloatingActionButton(
-                    onClick = onContinue,
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = "이어 그리기")
-                }
-            }
-
-            // Draw State Button
             when (drawingMode) {
-                DrawingMode.PROCESSING -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .padding(8.dp),
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                DrawingMode.IDLE -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "원하는 경로를 그려보세요",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Button(
+                            onClick = onDrawToggle,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("그리기 시작")
+                        }
+                    }
                 }
                 DrawingMode.DRAWING -> {
-                    ExtendedFloatingActionButton(
-                        onClick = onDrawToggle,
-                        icon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                        text = { Text("스냅") },
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                }
-                else -> {
-                    ExtendedFloatingActionButton(
-                        onClick = onDrawToggle,
-                        icon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                        text = {
-                            Text(if (drawingMode == DrawingMode.DONE) "다시 그리기" else "그리기")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "지도 위에 선을 그려주세요",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedButton(
+                                onClick = onClear,
+                                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Text("취소")
+                            }
+                            Button(
+                                onClick = onDrawToggle,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Text("완료")
+                            }
                         }
-                    )
+                    }
+                }
+                DrawingMode.PROCESSING -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.5.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "도로 스냅 경로 계산 중...",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+                DrawingMode.DONE -> {
+                    // Row 1: Horizontal stats layout
+                    val distanceStr = if (totalDistanceMeters >= 1000) {
+                        String.format("%.2f km", totalDistanceMeters / 1000.0)
+                    } else {
+                        String.format("%d m", totalDistanceMeters.toInt())
+                    }
+                    val estimatedTimeMin = (totalDistanceMeters / 66.67).toInt()
+                    val timeStr = if (estimatedTimeMin >= 60) {
+                        "${estimatedTimeMin / 60}시간 ${estimatedTimeMin % 60}분"
+                    } else {
+                        "${estimatedTimeMin}분"
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Column 1: 거리
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "거리",
+                                color = Color(0xFFB0BEC5),
+                                fontSize = 12.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = distanceStr,
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Divider 1
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(24.dp)
+                                .background(Color(0x33FFFFFF))
+                        )
+
+                        // Column 2: 예상 시간
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "예상 시간",
+                                color = Color(0xFFB0BEC5),
+                                fontSize = 12.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = timeStr,
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Divider 2
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(24.dp)
+                                .background(Color(0x33FFFFFF))
+                        )
+
+                        // Column 3: 마커 수
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "마커 수",
+                                color = Color(0xFFB0BEC5),
+                                fontSize = 12.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "${routeMarkersCount}개",
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = Color(0x1AFFFFFF))
+
+                    // Row 2: Primary buttons
+                    if (hasPendingEdits) {
+                        Button(
+                            onClick = onApplyEdits,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("수정 완료 적용")
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onContinue,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("이어 그리기")
+                            }
+                            Button(
+                                onClick = onExportGpx,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("GPX 저장")
+                            }
+                        }
+                    }
+
+                    // Row 3: Small TextButtons for utilities
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            if (canUndo) {
+                                TextButton(
+                                    onClick = onUndo,
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = Color.White
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Undo,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("실행 취소", fontSize = 13.sp)
+                                }
+                            }
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = onDrawToggle,
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Text("다시 그리기", fontSize = 13.sp)
+                            }
+                            TextButton(
+                                onClick = onClear,
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("지우기", fontSize = 13.sp)
+                            }
+                        }
+                    }
                 }
             }
         }

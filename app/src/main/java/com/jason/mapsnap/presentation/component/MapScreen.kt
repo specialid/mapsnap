@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,8 +33,18 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -200,6 +211,9 @@ fun MapScreen(
     var showHelpDialog by remember { mutableStateOf(false) }
     var showInfoDialog by remember { mutableStateOf(false) }
 
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -257,7 +271,75 @@ fun MapScreen(
 
     val isDrawing = state.drawingMode == DrawingMode.DRAWING
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = Color(0xFF1F1F23),
+                drawerContentColor = Color.White
+            ) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "MapSnap",
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 28.dp),
+                    color = Color(0x33FFFFFF)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                NavigationDrawerItem(
+                    label = { Text("설정") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        showSettingsDialog = true
+                    },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    colors = NavigationDrawerItemDefaults.colors(
+                        unselectedContainerColor = Color.Transparent,
+                        unselectedTextColor = Color.White,
+                        unselectedIconColor = Color.White
+                    ),
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+                NavigationDrawerItem(
+                    label = { Text("도움말") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        showHelpDialog = true
+                    },
+                    icon = { Icon(Icons.Default.Help, contentDescription = null) },
+                    colors = NavigationDrawerItemDefaults.colors(
+                        unselectedContainerColor = Color.Transparent,
+                        unselectedTextColor = Color.White,
+                        unselectedIconColor = Color.White
+                    ),
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+                NavigationDrawerItem(
+                    label = { Text("정보") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        showInfoDialog = true
+                    },
+                    icon = { Icon(Icons.Default.Info, contentDescription = null) },
+                    colors = NavigationDrawerItemDefaults.colors(
+                        unselectedContainerColor = Color.Transparent,
+                        unselectedTextColor = Color.White,
+                        unselectedIconColor = Color.White
+                    ),
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+            }
+        }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
         NaverMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
@@ -471,72 +553,30 @@ fun MapScreen(
             }
         }
 
-        // Custom Glassmorphic Top App Bar
+        // Floating Menu Button (Top-Left)
         Card(
             modifier = Modifier
-                .align(Alignment.TopCenter)
+                .align(Alignment.TopStart)
                 .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+                .padding(16.dp),
+            shape = CircleShape,
             colors = CardDefaults.cardColors(
                 containerColor = Color(0xCC1F1F23)
             ),
             border = BorderStroke(1.dp, Color(0x33FFFFFF)),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            IconButton(
+                onClick = {
+                    scope.launch { drawerState.open() }
+                },
+                modifier = Modifier.size(48.dp)
             ) {
-                Text(
-                    text = "MapSnap",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+                Icon(
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "메뉴",
+                    tint = Color.White
                 )
-                Box {
-                    var showMenu by remember { mutableStateOf(false) }
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Menu",
-                            tint = Color.White
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("설정") },
-                            onClick = {
-                                showMenu = false
-                                showSettingsDialog = true
-                            },
-                            leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("도움말") },
-                            onClick = {
-                                showMenu = false
-                                showHelpDialog = true
-                            },
-                            leadingIcon = { Icon(Icons.Default.Help, contentDescription = null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("정보") },
-                            onClick = {
-                                showMenu = false
-                                showInfoDialog = true
-                            },
-                            leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) }
-                        )
-                    }
-                }
             }
         }
 
@@ -653,74 +693,11 @@ fun MapScreen(
             )
         }
 
-        // Glassmorphic Path Statistics Card
-        val distanceStr = if (state.totalDistanceMeters >= 1000) {
-            String.format("%.2f km", state.totalDistanceMeters / 1000.0)
-        } else {
-            String.format("%d m", state.totalDistanceMeters.toInt())
-        }
-        val estimatedTimeMin = (state.totalDistanceMeters / 66.67).toInt()
-        val timeStr = if (estimatedTimeMin > 60) {
-            "${estimatedTimeMin / 60}시간 ${estimatedTimeMin % 60}분"
-        } else {
-            "${estimatedTimeMin}분"
-        }
-
-        AnimatedVisibility(
-            visible = state.drawingMode == DrawingMode.DONE && state.snappedRoute.isNotEmpty(),
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .offset(y = 80.dp) // Below Top App Bar
-                .padding(16.dp)
-        ) {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xCC1F1F23)
-                ),
-                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Text(
-                        text = "경로 통계",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
-                    Text(
-                        text = "총 거리: $distanceStr",
-                        color = Color(0xFFB0BEC5),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = "예상 시간: $timeStr",
-                        color = Color(0xFFB0BEC5),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = "중간 마커 수: ${state.routeMarkers.size}개",
-                        color = Color(0xFFB0BEC5),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        }
-
         // Right Side Column (API Counter Card + Map Type Toggle FAB)
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(y = 80.dp)
+                .statusBarsPadding()
                 .padding(16.dp),
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -811,6 +788,8 @@ fun MapScreen(
             drawingMode = state.drawingMode,
             hasPendingEdits = state.hasPendingEdits,
             canUndo = state.canUndo,
+            totalDistanceMeters = state.totalDistanceMeters,
+            routeMarkersCount = state.routeMarkers.size,
             onApplyEdits = viewModel::onApplyEdits,
             onUndo = viewModel::onUndo,
             onDrawToggle = viewModel::onDrawToggle,
@@ -913,4 +892,5 @@ fun MapScreen(
             }
         }
     }
+}
 }
