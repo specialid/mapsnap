@@ -324,6 +324,14 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
   - SDK 36 및 Compose BOM 2026 버전에 완벽히 대응하는 최신 권장 빌드 라이브러리 환경인 AGP `8.13.2` 및 Gradle wrapper `8.13`으로 일괄 상향 마이그레이션했습니다.
   - 최신 빌드 파이프라인의 호환성을 활용하여, 이전에 다운그레이드했던 `coreKtx` 버전을 SDK 36에서 지원하는 최고 안정 버전인 **`1.18.0`**으로 추가 상향했습니다.
   - 전체 컴파일 및 로컬 단위 테스트(`.\gradlew.bat compileDebugKotlin testDebugUnitTest`)가 경고 로그 및 우회 장치 없이 순정 상태로 정상 통과(`BUILD SUCCESSFUL`)함을 완벽하게 보증합니다.
+- **compileSdk 37 / targetSdk 37 상향 및 AGP 9.2.1 / Gradle 9.4.1 최신 빌드 시스템 마이그레이션 (2026-06-05)**:
+  - Android 16 SDK를 공식 지원하기 위해 `compileSdk = 37` 및 `targetSdk = 37`로 상향 조정했습니다.
+  - 빌드 시스템을 **AGP 9.2.1** 및 **Gradle 9.4.1**로 마이그레이션했습니다.
+  - AGP 9.x의 API 변경(BaseExtension 제거)에 대응하여 **Dagger Hilt** 버전을 **`2.59.2`**로 업그레이드했습니다.
+  - AGP 9.0+의 내장 Kotlin 컴파일러 환경 통합에 맞추어 `app/build.gradle.kts`에서 명시적인 `kotlin.android` 플러그인 의존성을 삭제하고, 기존의 `kotlinOptions` 블록을 신규 `kotlin { compilerOptions { jvmTarget } }` 구조로 전면 교체하였습니다.
+  - KSP가 코드를 생성하며 `kotlin.sourceSets`를 임의 구성할 때 발생하는 소스 세트 중복 에러를 해소하기 위해 `gradle.properties`에 `android.disallowKotlinSourceSets=false` 플래그를 추가했습니다.
+  - 이전 단계에서 일시 다운그레이드했던 `coreKtx` 버전을 SDK 37 지원 최고 버전인 **`1.19.0`**으로 안전하게 복구했습니다.
+  - 프로젝트 전체 컴파일 및 로컬 단위 테스트가 완벽히 성공하는 빌드 안정성을 확보했습니다.
 
 ---
 
@@ -356,3 +364,4 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `139d6f2` | chore: compileSdk/targetSdk 36 상향 및 의존성 라이브러리(BOM 2026.05.01 등) 일괄 최신화 |
 | `563c2cf` | chore: AGP 8.9.1 및 Gradle 8.12 마이그레이션 (임시 바이패스 제거 및 core-ktx 1.15.0 조정) |
 | `736fd84` | chore: AGP 8.13.2 및 Gradle 8.13 마이그레이션 (coreKtx 1.18.0 상향 포함) |
+| `3520eed` | chore: compileSdk/targetSdk 37 상향, AGP 9.2.1, Gradle 9.4.1, Hilt 2.59.2 및 coreKtx 1.19.0 업그레이드 |
