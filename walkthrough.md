@@ -311,9 +311,13 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
   - 그리기 모드(`DrawingMode.DRAWING`) 중 지도 드래그(Pan) 및 핀치 줌(Zoom) 조작을 지원하기 위해 `isMapMoveMode` 토글 상태를 구현했습니다.
   - 이동 모드 중에는 네이버 지도의 제스처를 동적 활성화하고 `DrawingOverlay`가 터치 이벤트를 소비하지 않고 지도로 그대로 투과되도록 조치했습니다.
   - 하단 카드에 `[지도 이동]` / `[그리기]` 모드 토글 버튼을 추가하고 좁은 화면에서도 3개 버튼이 안정적으로 어우러지도록 버튼 크기와 글자 크기를 축소 최적화했습니다.
-- **상태 간 레이아웃 높이 균등화 (Layout Shift 방지, 2026-06-05)**:
-  - `IDLE`, `DRAWING`, `PROCESSING` 세 가지 상태 간 전이 시 가로 행 및 버튼 높이 차이로 인해 카드가 덜컥거리는 현상을 해결했습니다.
-  - `IDLE` 상태의 버튼 높이를 `36.dp`로 맞추고 텍스트 폰트 크기를 `14.sp`로 축소하였으며, `PROCESSING` 상태에서도 Row 컨테이너의 높이를 `36.dp`로 강제 지정하고 텍스트 크기를 `14.sp`로 맞춰 완벽한 무흔들림(Zero Shift)을 완성했습니다.
+- **마지막 API 호출 한도 도달 시 UI 무한 대기 프리징 해결 (2026-06-05)**:
+  - T-Map API 호출 성공 시점에 횟수가 제한치(30회)를 정확히 채우게 되면 `checkApiLimitUseCase()`가 `Blocked`를 반환합니다.
+  - 기존에는 `Allowed` 스마트 캐스팅 실패로 인해 `return@fold` 조기 반환이 유발되어, 스냅된 경로가 UI에 로드되지 않고 스피너가 무한 회전하는 결함이 있었습니다.
+  - 스마트 캐스팅 대신 `when` 식 패턴 매칭을 사용하여 `Allowed` 및 `Blocked` 상태 모두에서 성공적으로 사용량 객체(`usage`)를 받아와 상태가 정상적으로 `DONE` 또는 롤백되도록 완전 조치하였습니다.
+- **compileSdk 35 / AGP 8.7.3 빌드 환경 라이브러리 일제 최신화 (2026-06-05)**:
+  - compileSdk 35가 만족하는 최신 안정 본들인 Kotlin `2.1.10`, Compose BOM `2025.02.00`, activityCompose `1.10.0`, naverMapCompose `1.8.2`, firebaseBom `34.14.0`으로 일제 최신화했습니다.
+  - Firebase BoM 34버전 마이그레이션에 따라 더 이상 제공되지 않는 `firebase-database-ktx` 의존성을 `firebase-database` 기본 모듈로 대체하여 빌드 정합성을 유지했습니다.
 
 ---
 
@@ -341,3 +345,5 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `c828aea` | fix: 지도 드래그-드로어 제스처 간섭 해결 및 API 한도 초과 시 UI 데드락 수정 |
 | `d148507` | feat: 그리기 모드 중 지도를 드래그/확대 조작할 수 있는 지도 이동 모드 토글 도입 |
 | `2a33471` | fix: IDLE, DRAWING, PROCESSING 상태 간의 레이아웃 세로 높이를 36dp로 통일하여 Layout Shift 방지 |
+| `c0004d1` | chore: compileSdk 35/AGP 8.7.3 호환 라이브러리 및 빌드 의존성 일괄 최신화 |
+| `e9f3248` | fix: API 한도 도달 시 UI 무한 대기 프리징 버그 수정 (when 식 패턴 매칭 도입) |
