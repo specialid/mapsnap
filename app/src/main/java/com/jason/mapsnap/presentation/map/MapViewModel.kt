@@ -552,7 +552,10 @@ class MapViewModel @Inject constructor(
             onSuccess = { newSubRoute ->
                 incrementApiCountUseCase()
                 val updatedCheckResult = checkApiLimitUseCase()
-                val usage = (updatedCheckResult as? CheckApiLimitUseCase.CheckResult.Allowed)?.usage ?: return@fold
+                val usage = when (updatedCheckResult) {
+                    is CheckApiLimitUseCase.CheckResult.Allowed -> updatedCheckResult.usage
+                    is CheckApiLimitUseCase.CheckResult.Blocked -> updatedCheckResult.usage
+                }
 
                 val fromPt = P_current[startIdx]
                 val toPt = P_current[endIdx]
@@ -710,7 +713,10 @@ class MapViewModel @Inject constructor(
 
                 incrementApiCountUseCase()
                 val updatedCheckResult = checkApiLimitUseCase()
-                val usage = (updatedCheckResult as? CheckApiLimitUseCase.CheckResult.Allowed)?.usage ?: return@fold
+                val usage = when (updatedCheckResult) {
+                    is CheckApiLimitUseCase.CheckResult.Allowed -> updatedCheckResult.usage
+                    is CheckApiLimitUseCase.CheckResult.Blocked -> updatedCheckResult.usage
+                }
 
                 // 이어 그리기: 기존 경로 뒤에 새 구간 연결 (연결점 중복 제거)
                 val combined = if (state.isContinuing && state.snappedRoute.isNotEmpty()) {
