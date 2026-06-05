@@ -1,21 +1,22 @@
 [versions]
 agp = "8.7.3"
-kotlin = "2.0.21"
-ksp = "2.0.21-1.0.28"
-composeBom = "2024.12.01"
+kotlin = "2.1.10"
+ksp = "2.1.10-1.0.30"
+composeBom = "2025.02.00"
 hilt = "2.54"
 hiltNavigationCompose = "1.2.0"
 orbit = "9.0.0"
 retrofit = "2.11.0"
 okhttp = "4.12.0"
 naverMap = "3.23.2"
-naverMapCompose = "1.7.1"
+naverMapCompose = "1.8.2"
 playServicesLocation = "21.3.0"
-activityCompose = "1.9.3"
+activityCompose = "1.10.0"
 coreKtx = "1.15.0"
 lifecycle = "2.8.7"
-firebaseBom = "33.1.1"
+firebaseBom = "34.14.0"
 googleServices = "4.4.2"
+
 
 
 [libraries]
@@ -60,7 +61,7 @@ play-services-location = { group = "com.google.android.gms", name = "play-servic
 # Test
 junit = { group = "junit", name = "junit", version = "4.13.2" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
-firebase-database = { group = "com.google.firebase", name = "firebase-database-ktx" }
+firebase-database = { group = "com.google.firebase", name = "firebase-database" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
