@@ -690,7 +690,13 @@ class MapViewModel @Inject constructor(
         // 2단계: 직선화된 경로를 T-Map에 전달하여 실도로 스냅
         val checkResult = checkApiLimitUseCase()
         if (checkResult is CheckApiLimitUseCase.CheckResult.Blocked) {
-            reduce { state.copy(isAdPromptDialogVisible = true) }
+            reduce {
+                state.copy(
+                    isAdPromptDialogVisible = true,
+                    drawingMode = if (state.snappedRoute.isNotEmpty()) DrawingMode.DONE else DrawingMode.IDLE,
+                    isProcessing = false
+                )
+            }
             return@intent
         }
 
@@ -737,7 +743,7 @@ class MapViewModel @Inject constructor(
                 Log.e("SnapDebug", "snapToRoad FAILED: ${e.message}", e)
                 reduce {
                     state.copy(
-                        drawingMode = if (state.isContinuing) DrawingMode.DONE else DrawingMode.DONE,
+                        drawingMode = if (state.snappedRoute.isNotEmpty()) DrawingMode.DONE else DrawingMode.IDLE,
                         isContinuing = false,
                         isProcessing = false,
                         error = e.message
