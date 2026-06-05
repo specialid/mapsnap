@@ -94,9 +94,3 @@ dependencies {
 
     testImplementation(libs.junit)
 }
-
-tasks.whenTaskAdded {
-    if (name.startsWith("check") && name.endsWith("AarMetadata")) {
-        enabled = false
-    }
-}
