@@ -37,6 +37,8 @@ data class MapState(
     val isProcessing: Boolean = false,
     val error: String? = null,
     val tmapApiCallCount: Int = 0,
+    val tmapMaxLimitCount: Int = 30,
+    val isAdPromptDialogVisible: Boolean = false,
     val naverMapApiCallCount: Int = 0,
     val hasPendingEdits: Boolean = false,
     val editHistory: List<EditSnapshot> = emptyList(),

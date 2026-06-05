@@ -255,11 +255,29 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `SnapToRoadUseCase` | 입력 RDP → 샘플링 → API → 출력 RDP 파이프라인, `fromWaypoints()` |
 | `RouteRepositoryImpl` | T-Map 청크 분할 호출, 경계 트리밍, 중복 좌표 제거 |
 | `ApiCallTracker` | T-Map 및 네이버 지도 API 호출 횟수를 집계 및 관리하는 싱글톤 컴포넌트 |
+| `DeviceUsage` | Firebase RTDB 저장용 일일 API 호출 및 충전 횟수 데이터 모델 |
+| `DeviceUsageRepository` | 디바이스 사용량 조회 및 업데이트 추상화 도메인 레포지토리 |
+| `DeviceUsageRepositoryImpl` | FirebaseDatabase 지연 초기화 및 3초 타임아웃, 로컬 폴백을 적용한 Firebase RTDB 연동 구현체 |
+| `DatabaseModule` | Repository DI 바인딩 모듈 (FirebaseDatabase 제공 로직 제거) |
 | `MapState` | DrawingMode, drawnPoints, simplifiedPoints, snappedRoute, routeMarkers, API 카운트 등 |
 | `MapViewModel` | 모든 인텐트, sampleMarkers, API 카운트 Flow 수집, GPX 저장 액션 처리 |
 | `DrawingOverlay` | Canvas 기반 손그림 · 직선화 오버레이, 스냅존 원 |
 | `MapScreen` | NaverMap Compose, segmentize, PathOverlay/Marker 렌더링, API 카운터 대시보드 오버레이, AlertDialog |
 | `BottomControls` | 그리기 / 스냅 / 이어 그리기 / 지우기 / GPX 내보내기 FAB |
+
+---
+
+## Firebase Realtime Database (RTDB) 연동
+
+- **기기 고유 식별자 추출 및 해싱**:
+  - `Settings.Secure.ANDROID_ID`를 획득하여 `MessageDigest`를 활용해 SHA-256 해시값(Hex String)을 생성합니다. 이를 통해 개인정보를 직접 유출하지 않고도 각 고유 기기를 안전하게 구별합니다.
+- **실시간 호출 횟수 클라우드 동기화 (지연 초기화 및 안전성 개선)**:
+  - 아시아 동남아 리전 데이터베이스 주소(`https://map-snap-b0438-default-rtdb.asia-southeast1.firebasedatabase.app`)를 명시하여 연결 에러를 방지합니다.
+  - 앱 시작 시 Firebase가 미초기화되었거나 네트워크 불통 시 발생하는 비정상 종료(Crash) 및 코루틴 무한 대기(Freeze) 문제를 예방하기 위해, `FirebaseDatabase` 인스턴스 획득에 try-catch 예외 처리를 적용하고 3초 타임아웃(`withTimeoutOrNull(3000L)`) 구조를 도입했습니다.
+  - 데이터베이스 통신 실패 또는 타임아웃 시 앱이 중단되지 않고 로컬 캐시 데이터(`localFallbackUsage`)를 대신 사용하여 중단 없는 UX를 제공합니다.
+  - Coroutines의 `await()`를 사용하여 Firebase의 비동기 리스너 호출을 일시중단(suspend) 함수 스타일로 래핑하고, MVI 스레딩 원칙에 따라 백그라운드 IO 디스패처(`Dispatchers.IO`) 상에서 동작하도록 보장하였습니다.
+- **오프라인 지속성**:
+  - 오프라인 상태에서도 캐시를 통해 앱이 비정상 종료 없이 동작할 수 있도록 로컬 레벨 영속성 고려.
 
 ---
 
@@ -281,4 +299,6 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `abe1464` | feat: 마커 편집 단계별 실행 취소 (Undo) 기능 구현 |
 | `cf6f3fb` | feat: 국소 마커 재탐색(Local Rerouting) 및 마커 보존 기능 구현 |
 | `002508c` | fix: AndroidManifest.xml에 앱 런처 아이콘 지정 및 아이콘/라인 두께 UI 개선 |
+| `f2e3a89` | feat: Firebase RTDB 기반 기기 고유 식별자 해싱 및 일일 API 호출 추적 레포지토리 구축 |
+
 

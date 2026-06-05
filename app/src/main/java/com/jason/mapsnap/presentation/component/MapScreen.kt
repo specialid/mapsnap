@@ -86,6 +86,8 @@ import org.orbitmvi.orbit.compose.collectAsState
 import org.orbitmvi.orbit.compose.collectSideEffect
 import android.graphics.PointF
 import com.jason.mapsnap.BuildConfig
+import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.delay
 
 private val SeoulCityHall = LatLng(37.5666, 126.9784)
 
@@ -192,6 +194,7 @@ fun MapScreen(
     val context = LocalContext.current
     val cameraPositionState = rememberCameraPositionState()
     var naverMap by remember { mutableStateOf<com.naver.maps.map.NaverMap?>(null) }
+    var showMockAdPlayer by remember { mutableStateOf(false) }
 
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showHelpDialog by remember { mutableStateOf(false) }
@@ -246,6 +249,9 @@ fun MapScreen(
                 Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
             MapSideEffect.RequestLocationPermission ->
                 locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            MapSideEffect.ShowRewardedAd -> {
+                showMockAdPlayer = true
+            }
         }
     }
 
@@ -755,7 +761,7 @@ fun MapScreen(
                                 fontSize = 11.sp
                             )
                             Text(
-                                text = "${state.tmapApiCallCount} 회",
+                                text = "${state.tmapApiCallCount} / ${state.tmapMaxLimitCount} 회",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp
@@ -850,6 +856,61 @@ fun MapScreen(
                     }
                 }
             )
+        }
+
+        // 일일 API 호출 한도 초과 경고 (광고 유도)
+        if (state.isAdPromptDialogVisible) {
+            AlertDialog(
+                onDismissRequest = { viewModel.onDismissAdPrompt() },
+                title = { Text("일일 API 호출 한도 초과", fontWeight = FontWeight.Bold) },
+                text = { Text("오늘 제공된 무료 API 호출 한도를 초과했습니다. 광고를 시청하고 10회 추가 이용하시겠습니까?") },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.onWatchAdRequested() }) {
+                        Text("광고 시청", color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.onDismissAdPrompt() }) {
+                        Text("취소")
+                    }
+                }
+            )
+        }
+
+        // 가상 광고 플레이어 다이얼로그
+        if (showMockAdPlayer) {
+            Dialog(onDismissRequest = {}) {
+                LaunchedEffect(Unit) {
+                    delay(3000L)
+                    showMockAdPlayer = false
+                    viewModel.onWatchAdCompleted()
+                }
+                Box(
+                    modifier = Modifier
+                        .size(280.dp, 180.dp)
+                        .background(Color(0xE61F1F23), shape = RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0x33FFFFFF), shape = RoundedCornerShape(16.dp))
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            color = Color(0xFFE65100),
+                            strokeWidth = 4.dp,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Text(
+                            text = "광고를 시청하는 중입니다...",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
         }
     }
 }

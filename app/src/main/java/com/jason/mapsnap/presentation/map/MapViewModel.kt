@@ -6,6 +6,9 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jason.mapsnap.data.tracker.ApiCallTracker
+import com.jason.mapsnap.domain.usecase.CheckApiLimitUseCase
+import com.jason.mapsnap.domain.usecase.IncrementApiCountUseCase
+import com.jason.mapsnap.domain.usecase.RechargeApiLimitUseCase
 import com.jason.mapsnap.domain.usecase.ExportGpxUseCase
 import com.jason.mapsnap.domain.usecase.SimplifyPathUseCase
 import com.jason.mapsnap.domain.usecase.SnapToRoadUseCase
@@ -31,7 +34,10 @@ class MapViewModel @Inject constructor(
     private val snapToRoad: SnapToRoadUseCase,
     private val simplifyPath: SimplifyPathUseCase,
     private val exportGpx: ExportGpxUseCase,
-    private val apiCallTracker: ApiCallTracker
+    private val apiCallTracker: ApiCallTracker,
+    private val checkApiLimitUseCase: CheckApiLimitUseCase,
+    private val incrementApiCountUseCase: IncrementApiCountUseCase,
+    private val rechargeApiLimitUseCase: RechargeApiLimitUseCase
 ) : ViewModel(), ContainerHost<MapState, MapSideEffect> {
 
     override val container = container<MapState, MapSideEffect>(MapState())
@@ -44,10 +50,13 @@ class MapViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            apiCallTracker.tmapCount.collect { count ->
-                intent {
-                    reduce { state.copy(tmapApiCallCount = count) }
-                }
+            val result = checkApiLimitUseCase()
+            val usage = when (result) {
+                is CheckApiLimitUseCase.CheckResult.Allowed -> result.usage
+                is CheckApiLimitUseCase.CheckResult.Blocked -> result.usage
+            }
+            intent {
+                reduce { state.copy(tmapApiCallCount = usage.dailyCount, tmapMaxLimitCount = 30 + usage.rechargedCount) }
             }
         }
         viewModelScope.launch {
@@ -531,10 +540,20 @@ class MapViewModel @Inject constructor(
             return@intent
         }
         
+        val checkResult = checkApiLimitUseCase()
+        if (checkResult is CheckApiLimitUseCase.CheckResult.Blocked) {
+            reduce { state.copy(isAdPromptDialogVisible = true) }
+            return@intent
+        }
+
         reduce { state.copy(isProcessing = true) }
         val result = withContext(Dispatchers.IO) { snapToRoad.fromWaypoints(waypoints, state.epsilonRouteDeg) }
         result.fold(
             onSuccess = { newSubRoute ->
+                incrementApiCountUseCase()
+                val updatedCheckResult = checkApiLimitUseCase()
+                val usage = (updatedCheckResult as? CheckApiLimitUseCase.CheckResult.Allowed)?.usage ?: return@fold
+
                 val fromPt = P_current[startIdx]
                 val toPt = P_current[endIdx]
                 
@@ -562,7 +581,8 @@ class MapViewModel @Inject constructor(
                         dirtyEnd = null,
                         editHistory = emptyList(),
                         isProcessing = false,
-                        error = null
+                        error = null,
+                        tmapApiCallCount = usage.dailyCount
                     )
                 }
                 postSideEffect(MapSideEffect.ShowToast("경로 재탐색이 완료되었습니다"))
@@ -668,6 +688,12 @@ class MapViewModel @Inject constructor(
         }
 
         // 2단계: 직선화된 경로를 T-Map에 전달하여 실도로 스냅
+        val checkResult = checkApiLimitUseCase()
+        if (checkResult is CheckApiLimitUseCase.CheckResult.Blocked) {
+            reduce { state.copy(isAdPromptDialogVisible = true) }
+            return@intent
+        }
+
         val result = withContext(Dispatchers.IO) { snapToRoad(points, state.epsilonDrawnDeg, state.epsilonRouteDeg) }
 
         Log.d("SnapDebug", "snapToRoad result: isSuccess=${result.isSuccess}, error=${result.exceptionOrNull()?.message}")
@@ -675,6 +701,10 @@ class MapViewModel @Inject constructor(
         result.fold(
             onSuccess = { newRoute ->
                 Log.d("SnapDebug", "route size=${newRoute.size}, continuing=${state.isContinuing}")
+
+                incrementApiCountUseCase()
+                val updatedCheckResult = checkApiLimitUseCase()
+                val usage = (updatedCheckResult as? CheckApiLimitUseCase.CheckResult.Allowed)?.usage ?: return@fold
 
                 // 이어 그리기: 기존 경로 뒤에 새 구간 연결 (연결점 중복 제거)
                 val combined = if (state.isContinuing && state.snappedRoute.isNotEmpty()) {
@@ -698,7 +728,8 @@ class MapViewModel @Inject constructor(
                         isProcessing = false,
                         error = null,
                         dirtyStart = null,
-                        dirtyEnd = null
+                        dirtyEnd = null,
+                        tmapApiCallCount = usage.dailyCount
                     )
                 }
             },
@@ -717,6 +748,22 @@ class MapViewModel @Inject constructor(
                 )
             }
         )
+    }
+
+    fun onDismissAdPrompt() = intent { reduce { state.copy(isAdPromptDialogVisible = false) } }
+    fun onWatchAdRequested() = intent {
+        reduce { state.copy(isAdPromptDialogVisible = false) }
+        postSideEffect(MapSideEffect.ShowRewardedAd)
+    }
+    fun onWatchAdCompleted() = intent {
+        rechargeApiLimitUseCase()
+        val checkResult = checkApiLimitUseCase()
+        val usage = when(checkResult) {
+            is CheckApiLimitUseCase.CheckResult.Allowed -> checkResult.usage
+            is CheckApiLimitUseCase.CheckResult.Blocked -> checkResult.usage
+        }
+        reduce { state.copy(tmapMaxLimitCount = 30 + usage.rechargedCount, tmapApiCallCount = usage.dailyCount) }
+        postSideEffect(MapSideEffect.ShowToast("API 한도가 10회 충전되었습니다"))
     }
 }
 
