@@ -296,6 +296,19 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 
 ---
 
+## 제스처 충돌 및 API 제한 데드락 버그 수정 (2026-06-05)
+
+- **지도 드래그 제스처와 Drawer 스와이프 충돌 해결**:
+  - `ModalNavigationDrawer` 컴포넌트에 `gesturesEnabled = drawerState.isOpen` 설정을 추가하여, 드로어가 닫혀 있을 때는 스와이프 열기 동작을 비활성화했습니다.
+  - 이로써 화면 좌측 끝 영역을 드래그하여 지도를 이동(Pan)할 때 드로어가 예기치 않게 열리는 제스처 간섭 오류가 완전히 제거되었습니다. (드로어가 열려 있을 때 화면을 터치하거나 왼쪽으로 스와이프하여 닫는 제스처는 정상 유지됩니다.)
+- **API 호출 한도 초과 시 UI 무한 로딩 데드락 방지**:
+  - 기존에는 `snapCurrentPath()` 호출 도중 API 한도 초과(Blocked) 시, `drawingMode = DrawingMode.PROCESSING` 및 `isProcessing = true` 상태에 그대로 정체된 채 광고 다이얼로그를 띄워 화면이 굳는 문제가 있었습니다.
+  - `Blocked` 분기 발생 시 기존 스냅 경로 존재 여부(`state.snappedRoute.isNotEmpty()`)에 따라 `drawingMode`를 `DrawingMode.DONE` 또는 `DrawingMode.IDLE`로 롤백하고 `isProcessing = false`로 동기화하도록 조치했습니다.
+- **경로 탐색 실패 시의 상태 복원 개선**:
+  - T-Map API 호출 실패(onFailure) 및 한도 초과 차단 시 무조건 `DrawingMode.DONE`으로 전이되던 상태 복원 흐름을 개선하여, 실제 기존의 스냅 경로 유무에 따라 `DONE` 또는 `IDLE`로 적합하게 복귀하도록 수정했습니다.
+
+---
+
 ## Git 히스토리
 
 | 커밋 | 내용 |
@@ -316,4 +329,5 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `002508c` | fix: AndroidManifest.xml에 앱 런처 아이콘 지정 및 아이콘/라인 두께 UI 개선 |
 | `f2e3a89` | feat: Firebase RTDB 기반 기기 고유 식별자 해싱 및 일일 API 호출 추적 레포지토리 구축 |
 | `a4accdd` | feat: Firebase RTDB 기반 기기 식별자 API 일일 호출 제한 및 광고 충전 기능 구현 |
-| `6e9b8f0` | feat: 상단 햄버거 드로어 도입 및 하단 통합 조작계(거리/시간 통계 통합) UI/UX 전면 개편 |
+| `c832bdd` | feat: 상단 햄버거 드로어 도입 및 하단 통합 조작계(거리/시간 통계 통합) UI/UX 전면 개편 |
+| `c828aea` | fix: 지도 드래그-드로어 제스처 간섭 해결 및 API 한도 초과 시 UI 데드락 수정 |

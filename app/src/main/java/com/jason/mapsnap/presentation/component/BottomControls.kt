@@ -53,6 +53,8 @@ fun BottomControls(
     onContinue: () -> Unit,
     onClear: () -> Unit,
     onExportGpx: () -> Unit,
+    isMapMoveMode: Boolean = false,
+    onToggleMapMoveMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -109,32 +111,48 @@ fun BottomControls(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "지도 위에 선을 그려주세요",
+                            text = if (isMapMoveMode) "지도를 조작할 수 있습니다" else "지도 위에 선을 그려주세요",
                             color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f)
                         )
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedButton(
+                                onClick = onToggleMapMoveMode,
+                                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color.White
+                                ),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Text(if (isMapMoveMode) "그리기" else "지도 이동", fontSize = 12.sp)
+                            }
+                            OutlinedButton(
                                 onClick = onClear,
                                 border = BorderStroke(1.dp, Color(0x33FFFFFF)),
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     contentColor = Color.White
-                                )
+                                ),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(36.dp)
                             ) {
-                                Text("취소")
+                                Text("취소", fontSize = 12.sp)
                             }
                             Button(
                                 onClick = onDrawToggle,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     contentColor = MaterialTheme.colorScheme.onPrimary
-                                )
+                                ),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(36.dp)
                             ) {
-                                Text("완료")
+                                Text("완료", fontSize = 12.sp)
                             }
                         }
                     }

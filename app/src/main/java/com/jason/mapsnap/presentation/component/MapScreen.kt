@@ -206,6 +206,7 @@ fun MapScreen(
     val cameraPositionState = rememberCameraPositionState()
     var naverMap by remember { mutableStateOf<com.naver.maps.map.NaverMap?>(null) }
     var showMockAdPlayer by remember { mutableStateOf(false) }
+    var isMapMoveMode by remember { mutableStateOf(false) }
 
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showHelpDialog by remember { mutableStateOf(false) }
@@ -254,6 +255,12 @@ fun MapScreen(
             cameraPositionState.animate(
                 CameraUpdate.toCameraPosition(CameraPosition(latLng, 16.0))
             )
+        }
+    }
+
+    LaunchedEffect(state.drawingMode) {
+        if (state.drawingMode != DrawingMode.DRAWING) {
+            isMapMoveMode = false
         }
     }
 
@@ -346,11 +353,11 @@ fun MapScreen(
             cameraPositionState = cameraPositionState,
             properties = MapProperties(mapType = state.mapType),
             uiSettings = MapUiSettings(
-                isScrollGesturesEnabled = !isDrawing,
-                isZoomGesturesEnabled = !isDrawing,
-                isRotateGesturesEnabled = !isDrawing,
-                isTiltGesturesEnabled = !isDrawing,
-                isLocationButtonEnabled = !isDrawing
+                isScrollGesturesEnabled = !isDrawing || isMapMoveMode,
+                isZoomGesturesEnabled = !isDrawing || isMapMoveMode,
+                isRotateGesturesEnabled = !isDrawing || isMapMoveMode,
+                isTiltGesturesEnabled = !isDrawing || isMapMoveMode,
+                isLocationButtonEnabled = !isDrawing || isMapMoveMode
             ),
             onMapClick = { _, _ ->
                 viewModel.onMarkerDeselect()
@@ -446,7 +453,7 @@ fun MapScreen(
         }
 
         DrawingOverlay(
-            drawingMode = state.drawingMode,
+            drawingMode = if (isMapMoveMode) DrawingMode.IDLE else state.drawingMode,
             simplifiedPoints = state.simplifiedPoints,
             isLoop = state.isLoop,
             cameraPositionState = cameraPositionState,
@@ -797,6 +804,8 @@ fun MapScreen(
             onContinue = viewModel::onContinueDrawing,
             onClear = viewModel::onClearDrawing,
             onExportGpx = { createDocumentLauncher.launch("mapsnap_route.gpx") },
+            isMapMoveMode = isMapMoveMode,
+            onToggleMapMoveMode = { isMapMoveMode = !isMapMoveMode },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
