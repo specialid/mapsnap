@@ -55,6 +55,7 @@ fun BottomControls(
     onExportGpx: () -> Unit,
     isMapMoveMode: Boolean = false,
     onToggleMapMoveMode: () -> Unit = {},
+    onCancelProcessing: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -98,7 +99,7 @@ fun BottomControls(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
-                                contentDescription = null,
+                                contentDescription = "그리기 시작",
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -162,29 +163,40 @@ fun BottomControls(
                 DrawingMode.PROCESSING -> {
                     Row(
                         modifier = Modifier.fillMaxWidth().height(36.dp),
-                        horizontalArrangement = Arrangement.Center,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CircularProgressIndicator(
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.5.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "도로 스냅 경로 계산 중...",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.5.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "도로 스냅 경로 계산 중...",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        TextButton(
+                            onClick = onCancelProcessing,
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                        ) {
+                            Text("취소", fontSize = 13.sp)
+                        }
                     }
                 }
                 DrawingMode.DONE -> {
                     // Row 1: Horizontal stats layout
                     val distanceStr = if (totalDistanceMeters >= 1000) {
-                        String.format("%.2f km", totalDistanceMeters / 1000.0)
+                        String.format(java.util.Locale.getDefault(), "%.2f km", totalDistanceMeters / 1000.0)
                     } else {
-                        String.format("%d m", totalDistanceMeters.toInt())
+                        String.format(java.util.Locale.getDefault(), "%d m", totalDistanceMeters.toInt())
                     }
                     val estimatedTimeMin = (totalDistanceMeters / 66.67).toInt()
                     val timeStr = if (estimatedTimeMin >= 60) {
@@ -283,7 +295,7 @@ fun BottomControls(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
-                                contentDescription = null,
+                                contentDescription = "수정 완료 적용",
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -304,7 +316,7 @@ fun BottomControls(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Add,
-                                    contentDescription = null,
+                                    contentDescription = "이어 그리기",
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -320,7 +332,7 @@ fun BottomControls(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Share,
-                                    contentDescription = null,
+                                    contentDescription = "GPX 저장",
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -345,7 +357,7 @@ fun BottomControls(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Undo,
-                                        contentDescription = null,
+                                        contentDescription = "실행 취소",
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))

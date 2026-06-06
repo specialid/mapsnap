@@ -42,6 +42,21 @@ class MapViewModel @Inject constructor(
 
     override val container = container<MapState, MapSideEffect>(MapState())
 
+    // 진행 중인 스냅 작업 세대 토큰: 취소/중복 호출 시 stale 결과 적용 방지
+    private var snapGeneration = 0
+
+    /** PROCESSING 중 취소: 진행 작업을 무효화하고 직전 모드로 복귀 */
+    fun onCancelProcessing() = intent {
+        snapGeneration++
+        reduce {
+            state.copy(
+                drawingMode = if (state.snappedRoute.isNotEmpty()) DrawingMode.DONE else DrawingMode.IDLE,
+                isProcessing = false,
+                simplifiedPoints = emptyList()
+            )
+        }
+    }
+
     companion object {
         const val LOOP_CLOSE_THRESHOLD_M = 30.0
         private const val REROUTE_DEBOUNCE_MS = 300L
@@ -197,13 +212,10 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    /** 마커 탭: 미선택 → 선택 / 선택 중 재탭 → 삭제 다이얼로그 표시 */
+    /** 마커 탭: 미선택 → 선택 / 선택 중 재탭 → 선택 해제 (삭제는 휴지통 버블로 일원화) */
     fun onMarkerTapped(index: Int) = intent {
-        if (state.selectedMarkerIndex == index) {
-            reduce { state.copy(showDeleteMarkerDialog = true) }
-        } else {
-            reduce { state.copy(selectedMarkerIndex = index) }
-        }
+        val next = if (state.selectedMarkerIndex == index) -1 else index
+        reduce { state.copy(selectedMarkerIndex = next) }
     }
 
     fun onDeleteMarkerTapped() = intent {
@@ -546,8 +558,10 @@ class MapViewModel @Inject constructor(
             return@intent
         }
 
+        val myGen = ++snapGeneration
         reduce { state.copy(isProcessing = true) }
         val result = withContext(Dispatchers.IO) { snapToRoad.fromWaypoints(waypoints, state.epsilonRouteDeg) }
+        if (myGen != snapGeneration) return@intent  // 취소되었거나 새 요청이 들어옴
         result.fold(
             onSuccess = { newSubRoute ->
                 incrementApiCountUseCase()
@@ -681,6 +695,7 @@ class MapViewModel @Inject constructor(
 
         // 1단계: RDP 직선화 → 즉시 오버레이에 반영하여 사용자에게 피드백
         val simplified = withContext(Dispatchers.Default) { simplifyPath(points, state.epsilonDrawnDeg) }
+        val myGen = ++snapGeneration
         reduce {
             state.copy(
                 drawingMode = DrawingMode.PROCESSING,
@@ -704,6 +719,7 @@ class MapViewModel @Inject constructor(
         }
 
         val result = withContext(Dispatchers.IO) { snapToRoad(points, state.epsilonDrawnDeg, state.epsilonRouteDeg) }
+        if (myGen != snapGeneration) return@intent  // 취소되었거나 새 요청이 들어옴
 
         Log.d("SnapDebug", "snapToRoad result: isSuccess=${result.isSuccess}, error=${result.exceptionOrNull()?.message}")
 

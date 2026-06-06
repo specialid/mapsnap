@@ -365,3 +365,30 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 | `563c2cf` | chore: AGP 8.9.1 및 Gradle 8.12 마이그레이션 (임시 바이패스 제거 및 core-ktx 1.15.0 조정) |
 | `736fd84` | chore: AGP 8.13.2 및 Gradle 8.13 마이그레이션 (coreKtx 1.18.0 상향 포함) |
 | `3520eed` | chore: compileSdk/targetSdk 37 상향, AGP 9.2.1, Gradle 9.4.1, Hilt 2.59.2 및 coreKtx 1.19.0 업그레이드 |
+| `timber` | chore: Timber 로깅 라이브러리 추가 및 디버그 빌드 한정 초기화 설정 |
+
+
+---
+
+## UI/UX 사용성 개선 (2026-06-06)
+
+검토에서 도출한 사용성 항목을 일괄 반영. Orbit MVI 순수성·메인스레드 보호·diff 안정성 준수.
+
+### 변경 요약
+- **데이터 손실 방지**: DONE 모드 `지우기`/`다시 그리기`에 확인 다이얼로그 추가 (MapScreen).
+- **파괴적 제스처 제거**: 마커 재탭을 삭제→선택 해제로 변경. 삭제는 휴지통 버블로 일원화 (MapViewModel.onMarkerTapped).
+- **API 한도 가시성**: 우측 상단 카드를 프로덕션에도 노출(남은 횟수), 잔여 5회↓ 주황·0회 빨강 경고. Naver 진단 행은 DEBUG 전용 (MapScreen).
+- **설정 추상화**: epsilon degree 슬라이더 → 약하게/보통/강하게 3단계 라벨화 (MapScreen + DRAWN/ROUTE_LEVELS 매핑).
+- **위치 권한 복구**: 드로어 "현재 위치로 이동" 항목 추가, 거부 시 안내 토스트 (MapScreen).
+- **테마 통일**: 편집 강조 주황(0xFFE65100)을 brand primary로 승격 (Theme.kt).
+- **첫 실행 온보딩**: SharedPreferences 플래그로 최초 1회 도움말 자동 표시(IO 디스패처) (MapScreen).
+- **미적용 편집 단서**: hasPendingEdits 시 경로를 앰버색으로 표시 (MapScreen PathOverlay).
+- **PROCESSING 취소**: snapGeneration 토큰으로 in-flight 무효화, BottomControls에 취소 버튼 (MapViewModel/BottomControls).
+- **접근성/로케일**: 거리/시간 String.format에 Locale 명시, BottomControls 아이콘 contentDescription 부여.
+
+### 후속 과제(의도적 보류)
+- 전체 문자열 strings.xml 리소스화: 906줄 파일 대규모 diff/회귀 위험으로 점진 이관 권장. Locale 처리로 i18n 실질 결함은 해소.
+- 마커 색약 형태 구분: 현재 S/G 라벨로 완화. 추후 형태(아이콘) 차별화 검토.
+
+### 검증
+- `./gradlew.bat :app:compileDebugKotlin` BUILD SUCCESSFUL.

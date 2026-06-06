@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.ModalDrawerSheet
@@ -99,8 +100,30 @@ import android.graphics.PointF
 import com.jason.mapsnap.BuildConfig
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 
 private val SeoulCityHall = LatLng(37.5666, 126.9784)
+
+// 단순화 강도(epsilon, degree)를 사용자용 5단계로 추상화하기 위한 매핑.
+// 기존 기본값(보통)이 중앙(index 2)에 오도록 보간한다.
+private val DRAWN_LEVELS = listOf(0.00005, 0.0000925, 0.000135, 0.0002175, 0.0003)
+private val ROUTE_LEVELS = listOf(0.00002, 0.000046, 0.000072, 0.000111, 0.00015)
+private val LEVEL_LABELS = listOf("매우 약하게", "약하게", "보통", "강하게", "매우 강하게")
+
+/** 현재 degree 값에 가장 가까운 단계 인덱스(0..2) 반환 */
+private fun nearestLevelIndex(value: Double, levels: List<Double>): Int {
+    var best = 0
+    var bestDiff = Double.MAX_VALUE
+    levels.forEachIndexed { i, lv ->
+        val diff = kotlin.math.abs(lv - value)
+        if (diff < bestDiff) { bestDiff = diff; best = i }
+    }
+    return best
+}
 
 /**
  * snappedRoute를 markers 위치 기준으로 구간 분할
@@ -211,6 +234,8 @@ fun MapScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showHelpDialog by remember { mutableStateOf(false) }
     var showInfoDialog by remember { mutableStateOf(false) }
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
+    var showRedrawConfirmDialog by remember { mutableStateOf(false) }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -235,6 +260,29 @@ fun MapScreen(
                 }
         } else {
             viewModel.onLocationReceived(SeoulCityHall)
+            Toast.makeText(
+                context,
+                "위치 권한이 거부되었습니다. 설정에서 허용해 주세요.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    // 현재 위치로 이동: 권한 보유 시 즉시 조회·이동, 미보유 시 권한 재요청
+    val moveToCurrentLocation: () -> Unit = {
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            LocationServices.getFusedLocationProviderClient(context)
+                .lastLocation
+                .addOnSuccessListener { location ->
+                    if (location != null) {
+                        viewModel.onLocationReceived(LatLng(location.latitude, location.longitude))
+                    }
+                }
+        } else {
+            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
 
@@ -248,6 +296,18 @@ fun MapScreen(
 
     LaunchedEffect(Unit) {
         locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    // 첫 실행 시 1회 도움말 자동 표시 (SharedPreferences 플래그, 디스크 I/O는 IO 디스패처)
+    LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("mapsnap_prefs", Context.MODE_PRIVATE)
+        val shown = withContext(Dispatchers.IO) { prefs.getBoolean("onboarding_shown", false) }
+        if (!shown) {
+            showHelpDialog = true
+            withContext(Dispatchers.IO) {
+                prefs.edit().putBoolean("onboarding_shown", true).apply()
+            }
+        }
     }
 
     LaunchedEffect(state.currentLocation) {
@@ -299,6 +359,21 @@ fun MapScreen(
                     color = Color(0x33FFFFFF)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
+                NavigationDrawerItem(
+                    label = { Text("현재 위치로 이동") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        moveToCurrentLocation()
+                    },
+                    icon = { Icon(Icons.Default.MyLocation, contentDescription = null) },
+                    colors = NavigationDrawerItemDefaults.colors(
+                        unselectedContainerColor = Color.Transparent,
+                        unselectedTextColor = Color.White,
+                        unselectedIconColor = Color.White
+                    ),
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
                 NavigationDrawerItem(
                     label = { Text("설정") },
                     selected = false,
@@ -377,8 +452,16 @@ fun MapScreen(
                         key(segIdx) {
                             PathOverlay(
                                 coords = seg,
-                                color = if (isSelected) Color(0xFFE65100) else Color(0xFF2196F3),
-                                outlineColor = if (isSelected) Color(0xFFBF360C) else Color(0xFF0D47A1),
+                                color = when {
+                                    isSelected -> Color(0xFFE65100)
+                                    state.hasPendingEdits -> Color(0xFFFFB300) // 적용 대기(앰버)
+                                    else -> Color(0xFF2196F3)
+                                },
+                                outlineColor = when {
+                                    isSelected -> Color(0xFFBF360C)
+                                    state.hasPendingEdits -> Color(0xFFFF6F00)
+                                    else -> Color(0xFF0D47A1)
+                                },
                                 width = if (isSelected) 7.dp else 5.dp,
                                 outlineWidth = 2.dp,
                                 onClick = {
@@ -591,8 +674,8 @@ fun MapScreen(
         // Settings Dialog
         if (showSettingsDialog) {
             var tempInterval by remember { mutableStateOf(state.markerIntervalMeters) }
-            var tempEpsilonDrawn by remember { mutableStateOf(state.epsilonDrawnDeg) }
-            var tempEpsilonRoute by remember { mutableStateOf(state.epsilonRouteDeg) }
+            var tempDrawnLevel by remember { mutableStateOf(nearestLevelIndex(state.epsilonDrawnDeg, DRAWN_LEVELS)) }
+            var tempRouteLevel by remember { mutableStateOf(nearestLevelIndex(state.epsilonRouteDeg, ROUTE_LEVELS)) }
             
             AlertDialog(
                 onDismissRequest = { showSettingsDialog = false },
@@ -611,26 +694,28 @@ fun MapScreen(
                             )
                         }
                         Column {
-                            Text(String.format("그리기 단순화 강도: %.6f°", tempEpsilonDrawn), fontSize = 14.sp)
+                            Text("그리기 정밀도: ${LEVEL_LABELS[tempDrawnLevel]}", fontSize = 14.sp)
                             Slider(
-                                value = tempEpsilonDrawn.toFloat(),
-                                onValueChange = { tempEpsilonDrawn = it.toDouble() },
-                                valueRange = 0.00005f..0.0003f
+                                value = tempDrawnLevel.toFloat(),
+                                onValueChange = { tempDrawnLevel = it.toInt().coerceIn(0, 4) },
+                                valueRange = 0f..4f,
+                                steps = 3
                             )
                         }
                         Column {
-                            Text(String.format("스냅 경로 단순화 강도: %.6f°", tempEpsilonRoute), fontSize = 14.sp)
+                            Text("경로 정밀도: ${LEVEL_LABELS[tempRouteLevel]}", fontSize = 14.sp)
                             Slider(
-                                value = tempEpsilonRoute.toFloat(),
-                                onValueChange = { tempEpsilonRoute = it.toDouble() },
-                                valueRange = 0.00002f..0.00015f
+                                value = tempRouteLevel.toFloat(),
+                                onValueChange = { tempRouteLevel = it.toInt().coerceIn(0, 4) },
+                                valueRange = 0f..4f,
+                                steps = 3
                             )
                         }
                         TextButton(
                             onClick = {
                                 tempInterval = 80.0
-                                tempEpsilonDrawn = 0.000135
-                                tempEpsilonRoute = 0.000072
+                                tempDrawnLevel = 2
+                                tempRouteLevel = 2
                             },
                             modifier = Modifier.align(Alignment.End)
                         ) {
@@ -640,7 +725,11 @@ fun MapScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        viewModel.onUpdateSettings(tempInterval, tempEpsilonDrawn, tempEpsilonRoute)
+                        viewModel.onUpdateSettings(
+                            tempInterval,
+                            DRAWN_LEVELS[tempDrawnLevel],
+                            ROUTE_LEVELS[tempRouteLevel]
+                        )
                         showSettingsDialog = false
                     }) {
                         Text("적용")
@@ -710,7 +799,13 @@ fun MapScreen(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (com.jason.mapsnap.BuildConfig.DEBUG) {
+            run {
+                val remaining = (state.tmapMaxLimitCount - state.tmapApiCallCount).coerceAtLeast(0)
+                val quotaColor = when {
+                    remaining <= 0 -> Color(0xFFE53935) // 소진: 빨강
+                    remaining <= 5 -> Color(0xFFFF9800) // 임박: 주황
+                    else -> Color.White
+                }
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
@@ -724,7 +819,7 @@ fun MapScreen(
                         horizontalAlignment = Alignment.Start
                     ) {
                         Text(
-                            text = "API 호출 현황",
+                            text = "남은 경로 분석",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
@@ -737,42 +832,44 @@ fun MapScreen(
                             Box(
                                 modifier = Modifier
                                     .size(6.dp)
-                                    .background(Color(0xFF2196F3), shape = CircleShape)
+                                    .background(quotaColor, shape = CircleShape)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "T-Map API: ",
+                                text = "오늘 남은 횟수: ",
                                 color = Color(0xFFB0BEC5),
                                 fontSize = 11.sp
                             )
                             Text(
-                                text = "${state.tmapApiCallCount} / ${state.tmapMaxLimitCount} 회",
-                                color = Color.White,
+                                text = "${remaining} / ${state.tmapMaxLimitCount}",
+                                color = quotaColor,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp
                             )
                         }
-                        Row(
-                            modifier = Modifier.padding(vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .background(Color(0xFF4CAF50), shape = CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Naver Map API: ",
-                                color = Color(0xFFB0BEC5),
-                                fontSize = 11.sp
-                            )
-                            Text(
-                                text = "${state.naverMapApiCallCount} 회",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
-                            )
+                        if (com.jason.mapsnap.BuildConfig.DEBUG) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(Color(0xFF4CAF50), shape = CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Naver Map API: ",
+                                    color = Color(0xFFB0BEC5),
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = "${state.naverMapApiCallCount} 회",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -800,12 +897,21 @@ fun MapScreen(
             routeMarkersCount = state.routeMarkers.size,
             onApplyEdits = viewModel::onApplyEdits,
             onUndo = viewModel::onUndo,
-            onDrawToggle = viewModel::onDrawToggle,
+            onDrawToggle = {
+                // DONE 모드의 "다시 그리기"는 전체 초기화 → 확인 후 진행
+                if (state.drawingMode == DrawingMode.DONE) showRedrawConfirmDialog = true
+                else viewModel.onDrawToggle()
+            },
             onContinue = viewModel::onContinueDrawing,
-            onClear = viewModel::onClearDrawing,
+            onClear = {
+                // DONE 모드의 "지우기"는 전체 삭제 → 확인 후 진행
+                if (state.drawingMode == DrawingMode.DONE) showClearConfirmDialog = true
+                else viewModel.onClearDrawing()
+            },
             onExportGpx = { createDocumentLauncher.launch("mapsnap_route.gpx") },
             isMapMoveMode = isMapMoveMode,
             onToggleMapMoveMode = { isMapMoveMode = !isMapMoveMode },
+            onCancelProcessing = viewModel::onCancelProcessing,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
@@ -841,6 +947,50 @@ fun MapScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { viewModel.onDeleteMarkerDismissed() }) {
+                        Text("취소")
+                    }
+                }
+            )
+        }
+
+        // 전체 지우기 확인 다이얼로그 (데이터 손실 방지)
+        if (showClearConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showClearConfirmDialog = false },
+                title = { Text("경로 전체 삭제", fontWeight = FontWeight.Bold) },
+                text = { Text("현재 경로와 모든 편집 내용을 삭제합니다. 계속할까요?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showClearConfirmDialog = false
+                        viewModel.onClearDrawing()
+                    }) {
+                        Text("삭제", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearConfirmDialog = false }) {
+                        Text("취소")
+                    }
+                }
+            )
+        }
+
+        // 다시 그리기 확인 다이얼로그 (기존 경로 폐기)
+        if (showRedrawConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showRedrawConfirmDialog = false },
+                title = { Text("다시 그리기", fontWeight = FontWeight.Bold) },
+                text = { Text("현재 경로를 버리고 새로 그립니다. 계속할까요?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showRedrawConfirmDialog = false
+                        viewModel.onDrawToggle()
+                    }) {
+                        Text("새로 그리기", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRedrawConfirmDialog = false }) {
                         Text("취소")
                     }
                 }
