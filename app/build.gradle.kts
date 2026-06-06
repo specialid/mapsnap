@@ -84,6 +84,7 @@ dependencies {
     implementation(libs.retrofit.gson)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+    implementation(libs.timber)
 
     implementation(libs.naver.map)
     implementation(libs.naver.map.compose)

@@ -4,11 +4,16 @@ import android.app.Application
 import android.util.Log
 import com.naver.maps.map.NaverMapSdk
 import dagger.hilt.android.HiltAndroidApp
+import timber.log.Timber
+import com.jason.mapsnap.BuildConfig
 
 @HiltAndroidApp
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEBUG) {
+            Timber.plant(Timber.DebugTree())
+        }
         val sdk = NaverMapSdk.getInstance(this)
         sdk.client = NaverMapSdk.NcpKeyClient(BuildConfig.NAVER_CLIENT_ID)
 

@@ -16,6 +16,7 @@ coreKtx = "1.19.0"
 lifecycle = "2.10.0"
 firebaseBom = "34.14.0"
 googleServices = "4.4.2"
+timber = "5.0.1"
 
 
 
@@ -62,6 +63,7 @@ play-services-location = { group = "com.google.android.gms", name = "play-servic
 junit = { group = "junit", name = "junit", version = "4.13.2" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-database = { group = "com.google.firebase", name = "firebase-database" }
+timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
