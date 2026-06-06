@@ -105,6 +105,8 @@ import kotlinx.coroutines.withContext
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 private val SeoulCityHall = LatLng(37.5666, 126.9784)
 
@@ -154,7 +156,7 @@ enum class MarkerType { START, END, INTERMEDIATE }
 
 /** 마커 아이콘: 타입 및 선택 여부에 따라 원형 비트맵(글자 포함) 생성 */
 private fun markerIcon(type: MarkerType, label: String?, selected: Boolean): OverlayImage {
-    val size = 80
+    val size = 100
     val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
     val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
@@ -207,7 +209,7 @@ private fun markerIcon(type: MarkerType, label: String?, selected: Boolean): Ove
     if (label != null) {
         paint.style = android.graphics.Paint.Style.FILL
         paint.color = textColor
-        paint.textSize = if (label.length > 1) 32f else 38f
+        paint.textSize = if (label.length > 1) 36f else 44f
         paint.textAlign = android.graphics.Paint.Align.CENTER
         paint.isFakeBoldText = true
         val textHeight = paint.descent() - paint.ascent()
@@ -613,14 +615,15 @@ fun MapScreen(
                 }
 
                 if (selectedIndex >= 0) {
-                    val bubbleSizeDp = 40.dp
-                    val bubbleSizePx = 40f * density
+                    val bubbleSizeDp = 48.dp
+                    val bubbleSizePx = 48f * density
                     Box(
                         modifier = Modifier
                             .offset {
                                 IntOffset(
-                                    (screenPoint.x - bubbleSizePx / 2).toInt(),
-                                    (screenPoint.y - 48f * density - bubbleSizePx / 2).toInt()
+                                    // 마커 오른쪽 32dp 오프셋: 드래그 핸들과 공간 충돌 방지
+                                    (screenPoint.x + 32f * density).toInt(),
+                                    (screenPoint.y - bubbleSizePx / 2).toInt()
                                 )
                             }
                             .size(bubbleSizeDp)
@@ -749,11 +752,14 @@ fun MapScreen(
                 onDismissRequest = { showHelpDialog = false },
                 title = { Text("도움말", fontWeight = FontWeight.Bold) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Text("• 경로 그리기: 화면의 그리기 버튼을 누르고 손가락으로 지도 위에 선을 그리면 보행자 도로로 자동 스냅됩니다.", fontSize = 14.sp)
                         Text("• 마커 이동: 편집 모드(DONE)에서 마커를 탭한 후, 주황색 드래그 핸들을 눌러서 끌면 위치를 수정할 수 있습니다.", fontSize = 14.sp)
                         Text("• 출발(S) 및 도착(G) 마커: 양 끝 마커를 드래그하여 이동시키면 경로가 그에 맞게 단축되거나 수정됩니다.", fontSize = 14.sp)
-                        Text("• 마커/구간 삭제: 선택된 중간 마커를 다시 탭하거나 위쪽 휴지통 아이콘을 누르면 마커가 삭제되며, 두 마커 사이의 파란색 경로(구간)를 탭하여 삭제할 수도 있습니다.", fontSize = 14.sp)
+                        Text("• 마커/구간 삭제: 중간 마커를 탭해 선택한 뒤 마커 오른쪽에 나타나는 빨간 휴지통 버튼을 누르면 마커가 삭제됩니다. 두 마커 사이의 파란색 경로(구간)를 탭하여 삭제할 수도 있습니다.", fontSize = 14.sp)
                         Text("• 이어 그리기: [+] 버튼을 누르면 기존 경로 끝에서부터 이어서 선을 그릴 수 있습니다.", fontSize = 14.sp)
                         Text("• 일괄 적용: 마커를 수정한 후 [적용] 버튼을 눌러 T-Map 실도로 스냅을 최종 업데이트합니다.", fontSize = 14.sp)
                         Text("• 실행 취소(Undo): 마커 조작 실수를 했을 때 [실행 취소] 버튼을 통해 이전 상태로 되돌릴 수 있습니다.", fontSize = 14.sp)
@@ -799,6 +805,12 @@ fun MapScreen(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // DRAWING/PROCESSING 중에는 지도 면적 확보를 위해 카드 숨김
+            AnimatedVisibility(
+                visible = state.drawingMode == DrawingMode.IDLE || state.drawingMode == DrawingMode.DONE,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
             run {
                 val remaining = (state.tmapMaxLimitCount - state.tmapApiCallCount).coerceAtLeast(0)
                 val quotaColor = when {
@@ -874,6 +886,7 @@ fun MapScreen(
                     }
                 }
             }
+            } // AnimatedVisibility 닫기
 
             // Map Type Toggle FAB
             FloatingActionButton(

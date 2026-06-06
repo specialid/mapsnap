@@ -58,12 +58,19 @@ fun BottomControls(
     onCancelProcessing: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // 지도 이동 모드 시 카드 테두리를 주황색으로 강조해 현재 상태를 화면 수준에서 알림
+    val cardBorder = if (isMapMoveMode && drawingMode == DrawingMode.DRAWING) {
+        BorderStroke(2.dp, Color(0xFFE65100))
+    } else {
+        BorderStroke(1.dp, Color(0x33FFFFFF))
+    }
+
     Card(
         colors = CardDefaults.cardColors(
             containerColor = Color(0xCC1F1F23)
         ),
         shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+        border = cardBorder,
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
@@ -77,37 +84,35 @@ fun BottomControls(
         ) {
             when (drawingMode) {
                 DrawingMode.IDLE -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "원하는 경로를 그려보세요",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
+                    // IDLE: 안내 텍스트 위 + 그리기 시작 버튼 전폭 48dp
+                    Text(
+                        text = "손가락으로 지도 위에 경로를 그려보세요",
+                        color = Color(0xFFB0BEC5),
+                        fontSize = 13.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Button(
+                        onClick = onDrawToggle,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         )
-                        Button(
-                            onClick = onDrawToggle,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.height(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "그리기 시작",
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("그리기 시작")
-                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "그리기 시작",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("그리기 시작", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
+
                 DrawingMode.DRAWING -> {
+                    // Row 1: 상태 텍스트 + 지도 이동 토글
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -115,54 +120,66 @@ fun BottomControls(
                     ) {
                         Text(
                             text = if (isMapMoveMode) "지도를 조작할 수 있습니다" else "지도 위에 선을 그려주세요",
-                            color = Color.White,
+                            color = if (isMapMoveMode) Color(0xFFFFB300) else Color.White,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.weight(1f)
                         )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        OutlinedButton(
+                            onClick = onToggleMapMoveMode,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isMapMoveMode) Color(0xFFE65100) else Color(0x55FFFFFF)
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (isMapMoveMode) Color(0x1AE65100) else Color.Transparent,
+                                contentColor = if (isMapMoveMode) Color(0xFFE65100) else Color.White
+                            ),
+                            modifier = Modifier.height(36.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                         ) {
-                            OutlinedButton(
-                                onClick = onToggleMapMoveMode,
-                                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = Color.White
-                                ),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text(if (isMapMoveMode) "그리기" else "지도 이동", fontSize = 12.sp)
-                            }
-                            OutlinedButton(
-                                onClick = onClear,
-                                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = Color.White
-                                ),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text("취소", fontSize = 12.sp)
-                            }
-                            Button(
-                                onClick = onDrawToggle,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                ),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text("완료", fontSize = 12.sp)
-                            }
+                            Text(if (isMapMoveMode) "그리기 전환" else "지도 이동", fontSize = 12.sp)
+                        }
+                    }
+
+                    // Row 2: 취소(보조, weight 1) + 완료(주, weight 2, 48dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = onClear,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            border = BorderStroke(1.dp, Color(0x55FFFFFF)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text("취소", fontSize = 14.sp)
+                        }
+                        Button(
+                            onClick = onDrawToggle,
+                            modifier = Modifier
+                                .weight(2f)
+                                .height(48.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("완료", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
+
                 DrawingMode.PROCESSING -> {
                     Row(
-                        modifier = Modifier.fillMaxWidth().height(36.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -183,16 +200,19 @@ fun BottomControls(
                                 fontWeight = FontWeight.Medium
                             )
                         }
-                        TextButton(
+                        OutlinedButton(
                             onClick = onCancelProcessing,
-                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                            border = BorderStroke(1.dp, Color(0x55FFFFFF)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            modifier = Modifier.height(36.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                         ) {
                             Text("취소", fontSize = 13.sp)
                         }
                     }
                 }
+
                 DrawingMode.DONE -> {
-                    // Row 1: Horizontal stats layout
                     val distanceStr = if (totalDistanceMeters >= 1000) {
                         String.format(java.util.Locale.getDefault(), "%.2f km", totalDistanceMeters / 1000.0)
                     } else {
@@ -205,89 +225,38 @@ fun BottomControls(
                         "${estimatedTimeMin}분"
                     }
 
+                    // Row 1: 통계 3열
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Column 1: 거리
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "거리",
-                                color = Color(0xFFB0BEC5),
-                                fontSize = 12.sp
-                            )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(text = "거리", color = Color(0xFFB0BEC5), fontSize = 12.sp)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = distanceStr,
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text(text = distanceStr, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
-
-                        // Divider 1
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(24.dp)
-                                .background(Color(0x33FFFFFF))
-                        )
-
-                        // Column 2: 예상 시간
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "예상 시간",
-                                color = Color(0xFFB0BEC5),
-                                fontSize = 12.sp
-                            )
+                        Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color(0x33FFFFFF)))
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(text = "예상 시간", color = Color(0xFFB0BEC5), fontSize = 12.sp)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = timeStr,
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text(text = timeStr, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
-
-                        // Divider 2
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(24.dp)
-                                .background(Color(0x33FFFFFF))
-                        )
-
-                        // Column 3: 마커 수
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "마커 수",
-                                color = Color(0xFFB0BEC5),
-                                fontSize = 12.sp
-                            )
+                        Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color(0x33FFFFFF)))
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(text = "마커 수", color = Color(0xFFB0BEC5), fontSize = 12.sp)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "${routeMarkersCount}개",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text(text = "${routeMarkersCount}개", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     HorizontalDivider(color = Color(0x1AFFFFFF))
 
-                    // Row 2: Primary buttons
+                    // Row 2: 주 액션 버튼
                     if (hasPendingEdits) {
                         Button(
                             onClick = onApplyEdits,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
                                 contentColor = MaterialTheme.colorScheme.onPrimary
@@ -299,7 +268,7 @@ fun BottomControls(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("수정 완료 적용")
+                            Text("수정 완료 적용", fontWeight = FontWeight.SemiBold)
                         }
                     } else {
                         Row(
@@ -308,7 +277,7 @@ fun BottomControls(
                         ) {
                             Button(
                                 onClick = onContinue,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).height(48.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer
@@ -319,12 +288,12 @@ fun BottomControls(
                                     contentDescription = "이어 그리기",
                                     modifier = Modifier.size(18.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text("이어 그리기")
                             }
                             Button(
                                 onClick = onExportGpx,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).height(48.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     contentColor = MaterialTheme.colorScheme.onPrimary
@@ -335,25 +304,24 @@ fun BottomControls(
                                     contentDescription = "GPX 저장",
                                     modifier = Modifier.size(18.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text("GPX 저장")
                             }
                         }
                     }
 
-                    // Row 3: Small TextButtons for utilities
+                    // Row 3: 유틸 버튼 — 실행 취소(좌) / 다시 그리기(가운데) / 지우기(우) 3분할 이격
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // 좌: 실행 취소 (있을 때만)
                         Box(modifier = Modifier.weight(1f)) {
                             if (canUndo) {
                                 TextButton(
                                     onClick = onUndo,
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = Color.White
-                                    )
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Undo,
@@ -365,18 +333,15 @@ fun BottomControls(
                                 }
                             }
                         }
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        // 가운데: 다시 그리기
+                        TextButton(
+                            onClick = onDrawToggle,
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
                         ) {
-                            TextButton(
-                                onClick = onDrawToggle,
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = Color.White
-                                )
-                            ) {
-                                Text("다시 그리기", fontSize = 13.sp)
-                            }
+                            Text("다시 그리기", fontSize = 13.sp)
+                        }
+                        // 우: 지우기 (에러색, 의도적 이격)
+                        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                             TextButton(
                                 onClick = onClear,
                                 colors = ButtonDefaults.textButtonColors(
