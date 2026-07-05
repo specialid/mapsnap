@@ -5,4 +5,8 @@ data class DeviceUsage(
     val dailyCount: Int = 0,
     val rechargedCount: Int = 0,
     val updatedAt: Long = 0
-)
+) {
+    companion object {
+        const val DAILY_BASE_LIMIT = 30
+    }
+}

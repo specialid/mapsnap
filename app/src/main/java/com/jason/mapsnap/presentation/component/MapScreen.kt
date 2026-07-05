@@ -118,7 +118,7 @@ private val DRAWN_LEVELS = listOf(0.00005, 0.0000925, 0.000135, 0.0002175, 0.000
 private val ROUTE_LEVELS = listOf(0.00002, 0.000046, 0.000072, 0.000111, 0.00015)
 private val LEVEL_LABELS = listOf("매우 약하게", "약하게", "보통", "강하게", "매우 강하게")
 
-/** 현재 degree 값에 가장 가까운 단계 인덱스(0..2) 반환 */
+/** 현재 degree 값에 가장 가까운 단계 인덱스(0..4) 반환 */
 private fun nearestLevelIndex(value: Double, levels: List<Double>): Int {
     var best = 0
     var bestDiff = Double.MAX_VALUE
@@ -347,8 +347,6 @@ fun MapScreen(
         when (effect) {
             is MapSideEffect.ShowToast ->
                 Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
-            MapSideEffect.RequestLocationPermission ->
-                locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
             MapSideEffect.ShowRewardedAd -> {
                 showMockAdPlayer = true
             }

@@ -29,7 +29,7 @@ class CheckApiLimitUseCase @Inject constructor(
             repository.updateUsage(usage)
         }
 
-        val limit = 30 + usage.rechargedCount
+        val limit = DeviceUsage.DAILY_BASE_LIMIT + usage.rechargedCount
         return if (usage.dailyCount < limit) {
             CheckResult.Allowed(usage)
         } else {

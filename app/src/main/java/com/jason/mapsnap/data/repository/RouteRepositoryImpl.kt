@@ -1,6 +1,6 @@
 package com.jason.mapsnap.data.repository
 
-import android.util.Log
+import timber.log.Timber
 import com.jason.mapsnap.data.remote.TmapService
 import com.jason.mapsnap.data.remote.dto.TmapRequest
 import com.jason.mapsnap.data.tracker.ApiCallTracker
@@ -26,14 +26,7 @@ class RouteRepositoryImpl @Inject constructor(
     }
 
     private fun haversine(a: LatLng, b: LatLng): Double {
-        val R = 6_371_000.0
-        val dLat = Math.toRadians(b.latitude - a.latitude)
-        val dLon = Math.toRadians(b.longitude - a.longitude)
-        val sinLat = sin(dLat / 2)
-        val sinLon = sin(dLon / 2)
-        val c = sinLat * sinLat +
-                cos(Math.toRadians(a.latitude)) * cos(Math.toRadians(b.latitude)) * sinLon * sinLon
-        return 2 * R * asin(sqrt(c))
+        return com.jason.mapsnap.domain.util.GeoUtils.haversineMeters(a, b)
     }
 
     override suspend fun getPedestrianRoute(
@@ -92,8 +85,7 @@ class RouteRepositoryImpl @Inject constructor(
                 passList = passList
             )
 
-            Log.d(
-                "RouteRepositoryImpl",
+            Timber.d(
                 "Starting T-Map API call - Chunk: $chunkIndex/${chunks.size}, Start: (${start.latitude}, ${start.longitude}), End: (${end.latitude}, ${end.longitude}), passList: $passList"
             )
 
@@ -102,8 +94,7 @@ class RouteRepositoryImpl @Inject constructor(
             val response = service.getPedestrianRoute(appKey = apiKey, request = request)
             val features = response.features
 
-            Log.d(
-                "RouteRepositoryImpl",
+            Timber.d(
                 "Completed T-Map API call - Chunk: $chunkIndex/${chunks.size}, Success: ${features != null}, Features size: ${features?.size ?: 0}"
             )
 

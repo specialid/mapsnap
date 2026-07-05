@@ -107,12 +107,11 @@ class ExportGpxUseCaseTest {
         val trkptBlock = gpx.substring(trkptIndex, closeIndex)
 
         // 첫 번째 trkpt에 <time> 태그가 있는지 확인
-        if (trkptBlock.contains("<time>")) {
-            val timeStart = trkptBlock.indexOf("<time>") + 6
-            val timeEnd = trkptBlock.indexOf("</time>")
-            val timeValue = trkptBlock.substring(timeStart, timeEnd)
-            assert(timeValue == startIsoString)
-        }
+        assert(trkptBlock.contains("<time>"))
+        val timeStart = trkptBlock.indexOf("<time>") + 6
+        val timeEnd = trkptBlock.indexOf("</time>")
+        val timeValue = trkptBlock.substring(timeStart, timeEnd)
+        assert(timeValue == startIsoString)
     }
 
     /**

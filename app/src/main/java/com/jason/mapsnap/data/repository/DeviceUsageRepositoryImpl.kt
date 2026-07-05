@@ -2,7 +2,7 @@ package com.jason.mapsnap.data.repository
 
 import android.content.Context
 import android.provider.Settings
-import android.util.Log
+import timber.log.Timber
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -50,7 +50,7 @@ class DeviceUsageRepositoryImpl @Inject constructor(
         return try {
             FirebaseDatabase.getInstance("https://map-snap-b0438-default-rtdb.asia-southeast1.firebasedatabase.app")
         } catch (e: Exception) {
-            Log.e("DeviceUsageRepo", "FirebaseDatabase not initialized: ${e.message}")
+            Timber.e("FirebaseDatabase not initialized: ${e.message}")
             null
         }
     }
@@ -61,7 +61,7 @@ class DeviceUsageRepositoryImpl @Inject constructor(
 
         val db = getDatabase()
         if (db == null) {
-            Log.w("DeviceUsageRepo", "Database is null, returning local fallback")
+            Timber.w("Database is null, returning local fallback")
             return@withContext localFallbackUsage
         }
 
@@ -75,11 +75,11 @@ class DeviceUsageRepositoryImpl @Inject constructor(
                 saveLocalUsage(usage)
                 usage
             } else {
-                Log.w("DeviceUsageRepo", "Timeout fetching usage, returning local fallback")
+                Timber.w("Timeout fetching usage, returning local fallback")
                 localFallbackUsage
             }
         } catch (e: Exception) {
-            Log.w("DeviceUsageRepo", "Error fetching usage: ${e.message}, returning local fallback", e)
+            Timber.w(e, "Error fetching usage: ${e.message}, returning local fallback")
             localFallbackUsage
         }
     }
@@ -90,7 +90,7 @@ class DeviceUsageRepositoryImpl @Inject constructor(
 
         val db = getDatabase()
         if (db == null) {
-            Log.w("DeviceUsageRepo", "Database is null, cannot update database")
+            Timber.w("Database is null, cannot update database")
             return@withContext
         }
 
@@ -103,17 +103,17 @@ class DeviceUsageRepositoryImpl @Inject constructor(
                 true
             }
             if (result == null) {
-                Log.w("DeviceUsageRepo", "Timeout updating usage in database")
+                Timber.w("Timeout updating usage in database")
             }
         } catch (e: Exception) {
-            Log.e("DeviceUsageRepo", "Error updating usage in database: ${e.message}", e)
+            Timber.e(e, "Error updating usage in database: ${e.message}")
         }
     }
 
     override suspend fun incrementDailyCount(): DeviceUsage = withContext(Dispatchers.IO) {
         val db = getDatabase()
         if (db == null) {
-            Log.w("DeviceUsageRepo", "Database is null, incrementing local fallback only")
+            Timber.w("Database is null, incrementing local fallback only")
             return@withContext incrementLocalFallback()
         }
 
@@ -128,11 +128,11 @@ class DeviceUsageRepositoryImpl @Inject constructor(
                 saveLocalUsage(result)
                 result
             } else {
-                Log.w("DeviceUsageRepo", "Transaction timeout, incrementing local fallback only")
+                Timber.w("Transaction timeout, incrementing local fallback only")
                 incrementLocalFallback()
             }
         } catch (e: Exception) {
-            Log.e("DeviceUsageRepo", "Error incrementing usage in database: ${e.message}, incrementing local fallback only", e)
+            Timber.e(e, "Error incrementing usage in database: ${e.message}, incrementing local fallback only")
             incrementLocalFallback()
         }
     }

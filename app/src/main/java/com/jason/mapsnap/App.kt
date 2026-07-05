@@ -1,7 +1,6 @@
 package com.jason.mapsnap
 
 import android.app.Application
-import android.util.Log
 import com.naver.maps.map.NaverMapSdk
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
@@ -19,8 +18,7 @@ class App : Application() {
 
         // 진단: 인증 실패 시 정확한 코드/메시지 출력
         sdk.setOnAuthFailedListener { exception ->
-            Log.e(
-                "NaverAuth",
+            Timber.e(
                 "=== 인증 실패: code=${exception.errorCode}, " +
                     "message=${exception.message}, " +
                     "type=${exception.javaClass.simpleName} ==="

@@ -2,9 +2,9 @@ package com.jason.mapsnap.presentation.map
 
 import android.content.ContentResolver
 import android.net.Uri
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.jason.mapsnap.data.model.DeviceUsage
 import com.jason.mapsnap.data.tracker.ApiCallTracker
 import com.jason.mapsnap.domain.model.GpxExportOptions
 import com.jason.mapsnap.domain.usecase.CheckApiLimitUseCase
@@ -13,23 +13,18 @@ import com.jason.mapsnap.domain.usecase.RechargeApiLimitUseCase
 import com.jason.mapsnap.domain.usecase.ExportGpxUseCase
 import com.jason.mapsnap.domain.usecase.SimplifyPathUseCase
 import com.jason.mapsnap.domain.usecase.SnapToRoadUseCase
+import com.jason.mapsnap.domain.util.GeoUtils.haversineMeters
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.map.compose.MapType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.orbitmvi.orbit.ContainerHost
 import org.orbitmvi.orbit.viewmodel.container
+import timber.log.Timber
 import javax.inject.Inject
-import kotlin.math.asin
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
@@ -54,6 +49,8 @@ class MapViewModel @Inject constructor(
     @Volatile
     private var applyInFlight = false
 
+    private val activeStroke = mutableListOf<LatLng>()
+
     /** PROCESSING 중 취소: 진행 작업을 무효화하고 직전 모드로 복귀 */
     fun onCancelProcessing() = intent {
         snapGeneration++
@@ -68,8 +65,6 @@ class MapViewModel @Inject constructor(
 
     companion object {
         const val LOOP_CLOSE_THRESHOLD_M = 30.0
-        private const val REROUTE_DEBOUNCE_MS = 300L
-        private const val DEFAULT_INTERVAL_METERS = 80.0
     }
 
     init {
@@ -80,7 +75,7 @@ class MapViewModel @Inject constructor(
                 is CheckApiLimitUseCase.CheckResult.Blocked -> result.usage
             }
             intent {
-                reduce { state.copy(tmapApiCallCount = usage.dailyCount, tmapMaxLimitCount = 30 + usage.rechargedCount) }
+                reduce { state.copy(tmapApiCallCount = usage.dailyCount, tmapMaxLimitCount = DeviceUsage.DAILY_BASE_LIMIT + usage.rechargedCount) }
             }
         }
         viewModelScope.launch {
@@ -94,7 +89,7 @@ class MapViewModel @Inject constructor(
 
     fun onNaverMapLoaded() = intent {
         apiCallTracker.incrementNaver()
-        Log.d("MapViewModel", "Naver Map API (Mobile Dynamic Map) 로딩 완료")
+        Timber.d("Naver Map API (Mobile Dynamic Map) 로딩 완료")
     }
 
     fun onToggleMapType() = intent {
@@ -153,7 +148,7 @@ class MapViewModel @Inject constructor(
             postSideEffect(MapSideEffect.ShowToast("GPX 파일이 성공적으로 저장되었습니다"))
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            Log.e("MapViewModel", "Failed to export GPX: ${e.message}", e)
+            Timber.e(e, "Failed to export GPX: ${e.message}")
             reduce { state.copy(isProcessing = false) }
             postSideEffect(MapSideEffect.ShowToast(e.message ?: "GPX 파일 저장에 실패했습니다"))
         }
@@ -239,12 +234,13 @@ class MapViewModel @Inject constructor(
 
     fun onDrawStart(point: LatLng) = intent {
         if (state.drawingMode != DrawingMode.DRAWING) return@intent
-        reduce { state.copy(drawnPoints = listOf(point)) }
+        activeStroke.clear()
+        activeStroke.add(point)
     }
 
     fun onDrawPoint(point: LatLng) = intent {
         if (state.drawingMode != DrawingMode.DRAWING) return@intent
-        reduce { state.copy(drawnPoints = state.drawnPoints + point) }
+        activeStroke.add(point)
     }
 
     /**
@@ -253,26 +249,28 @@ class MapViewModel @Inject constructor(
      */
     fun onDrawEnd() = intent {
         if (state.drawingMode != DrawingMode.DRAWING) return@intent
-        if (state.drawnPoints.size < 2) {
-            // 너무 짧은 스트로크(오터치 등)는 버리고 계속 그리기 상태 유지
-            reduce { state.copy(drawnPoints = emptyList()) }
+        if (activeStroke.size < 2) {
+            // 너무 짧은 스트로크(오터치 등)는 버림
+            activeStroke.clear()
             return@intent
         }
+        val stroke = activeStroke.toList()
+        activeStroke.clear()
         reduce {
             state.copy(
-                pendingStrokes = state.pendingStrokes + listOf(state.drawnPoints),
-                drawnPoints = emptyList()
+                pendingStrokes = state.pendingStrokes + listOf(stroke)
             )
         }
     }
 
     /** "완료" 버튼: 적립된 모든 스트로크를 하나로 이어붙여 1회만 스냅한다 */
     private fun finishDrawing() = intent {
-        val strokes = if (state.drawnPoints.size >= 2) {
-            state.pendingStrokes + listOf(state.drawnPoints)
+        val strokes = if (activeStroke.size >= 2) {
+            state.pendingStrokes + listOf(activeStroke.toList())
         } else {
             state.pendingStrokes
         }
+        activeStroke.clear()
         if (strokes.isEmpty()) {
             reduce {
                 state.copy(
@@ -293,6 +291,7 @@ class MapViewModel @Inject constructor(
     }
 
     fun onClearDrawing() = intent {
+        activeStroke.clear()
         reduce {
             state.copy(
                 drawingMode = DrawingMode.IDLE,
@@ -332,19 +331,19 @@ class MapViewModel @Inject constructor(
             reduce { state.copy(showDeleteMarkerDialog = false) }
             return@intent
         }
-        val start = state.routeStart ?: return@intent
-        val end = state.routeEnd ?: return@intent
+        val start = state.routeStart ?: run { reduce { state.copy(showDeleteMarkerDialog = false) }; return@intent }
+        val end = state.routeEnd ?: run { reduce { state.copy(showDeleteMarkerDialog = false) }; return@intent }
         val prev = if (idx == 0) start else state.routeMarkers[idx - 1]
         val next = if (idx == state.routeMarkers.lastIndex) end else state.routeMarkers[idx + 1]
         val updatedMarkers = state.routeMarkers.toMutableList().also { it.removeAt(idx) }
         val newRoute = spliceRoute(state.snappedRoute, prev, next, listOf(prev, next))
-        val newHistory = state.editHistory + EditSnapshot(
+        val newHistory = (state.editHistory + EditSnapshot(
             state.routeStart,
             state.routeEnd,
             state.routeMarkers,
             state.snappedRoute,
             state.dirtyRanges
-        )
+        )).takeLast(20)
         val newDirtyRanges = shiftDirtyRangesAfterRemoval(
             state.dirtyRanges,
             removedControlPoint = idx + 1,
@@ -455,19 +454,19 @@ class MapViewModel @Inject constructor(
             return@intent
         }
         val markerIdx = segIdx.coerceAtMost(markers.lastIndex)
-        val start = state.routeStart ?: return@intent
-        val end = state.routeEnd ?: return@intent
+        val start = state.routeStart ?: run { reduce { state.copy(showDeleteSegmentDialog = false) }; return@intent }
+        val end = state.routeEnd ?: run { reduce { state.copy(showDeleteSegmentDialog = false) }; return@intent }
         val prev = if (markerIdx == 0) start else markers[markerIdx - 1]
         val next = if (markerIdx == markers.lastIndex) end else markers[markerIdx + 1]
         val updatedMarkers = markers.toMutableList().also { it.removeAt(markerIdx) }
         val newRoute = spliceRoute(state.snappedRoute, prev, next, listOf(prev, next))
-        val newHistory = state.editHistory + EditSnapshot(
+        val newHistory = (state.editHistory + EditSnapshot(
             state.routeStart,
             state.routeEnd,
             state.routeMarkers,
             state.snappedRoute,
             state.dirtyRanges
-        )
+        )).takeLast(20)
         val newDirtyRanges = shiftDirtyRangesAfterRemoval(
             state.dirtyRanges,
             removedControlPoint = markerIdx + 1,
@@ -492,75 +491,7 @@ class MapViewModel @Inject constructor(
         reduce { state.copy(selectedSegmentIndex = -1, showDeleteSegmentDialog = false) }
     }
 
-    /** 지도 탭: 선택된 마커를 해당 위치로 이동 후 해당 구간만 재탐색 */
-    fun onMapTapped(latLng: LatLng) = intent {
-        val idx = state.selectedMarkerIndex
-        val newHistory = state.editHistory + EditSnapshot(
-            state.routeStart,
-            state.routeEnd,
-            state.routeMarkers,
-            state.snappedRoute,
-            state.dirtyRanges
-        )
-        when (idx) {
-            -2 -> {
-                val start = state.routeStart ?: return@intent
-                val next = state.routeMarkers.firstOrNull() ?: state.routeEnd ?: return@intent
-                val newRoute = spliceRoute(state.snappedRoute, start, next, listOf(latLng, next))
-                val controlPointIndex = 0
-                val newDirtyRanges = mergeDirtyRange(state.dirtyRanges, controlPointIndex)
-                reduce {
-                    state.copy(
-                        routeStart = latLng,
-                        snappedRoute = newRoute,
-                        selectedMarkerIndex = -1,
-                        hasPendingEdits = true,
-                        editHistory = newHistory,
-                        dirtyRanges = newDirtyRanges
-                    )
-                }
-            }
-            -3 -> {
-                val end = state.routeEnd ?: return@intent
-                val prev = state.routeMarkers.lastOrNull() ?: state.routeStart ?: return@intent
-                val newRoute = spliceRoute(state.snappedRoute, prev, end, listOf(prev, latLng))
-                val controlPointIndex = state.routeMarkers.size + 1
-                val newDirtyRanges = mergeDirtyRange(state.dirtyRanges, controlPointIndex)
-                reduce {
-                    state.copy(
-                        routeEnd = latLng,
-                        snappedRoute = newRoute,
-                        selectedMarkerIndex = -1,
-                        hasPendingEdits = true,
-                        editHistory = newHistory,
-                        dirtyRanges = newDirtyRanges
-                    )
-                }
-            }
-            else -> {
-                val markers = state.routeMarkers
-                if (idx < 0 || idx >= markers.size) return@intent
-                val updatedMarkers = markers.toMutableList().also { it[idx] = latLng }
-                val start = state.routeStart ?: return@intent
-                val end = state.routeEnd ?: return@intent
-                val prev = if (idx == 0) start else updatedMarkers[idx - 1]
-                val next = if (idx == updatedMarkers.lastIndex) end else updatedMarkers[idx + 1]
-                val newRoute = spliceRoute(state.snappedRoute, prev, next, listOf(prev, latLng, next))
-                val controlPointIndex = idx + 1
-                val newDirtyRanges = mergeDirtyRange(state.dirtyRanges, controlPointIndex)
-                reduce {
-                    state.copy(
-                        routeMarkers = updatedMarkers,
-                        snappedRoute = newRoute,
-                        selectedMarkerIndex = -1,
-                        hasPendingEdits = true,
-                        editHistory = newHistory,
-                        dirtyRanges = newDirtyRanges
-                    )
-                }
-            }
-        }
-    }
+
 
     /** 선택 해제 */
     fun onMarkerDeselect() = intent {
@@ -577,7 +508,7 @@ class MapViewModel @Inject constructor(
         )
         reduce {
             state.copy(
-                editHistory = state.editHistory + currentSnapshot
+                editHistory = (state.editHistory + currentSnapshot).takeLast(20)
             )
         }
     }
@@ -779,21 +710,12 @@ class MapViewModel @Inject constructor(
         return result
     }
 
-    private fun haversineMeters(a: LatLng, b: LatLng): Double {
-        val R = 6_371_000.0
-        val dLat = Math.toRadians(b.latitude - a.latitude)
-        val dLon = Math.toRadians(b.longitude - a.longitude)
-        val sinLat = sin(dLat / 2)
-        val sinLon = sin(dLon / 2)
-        val c = sinLat * sinLat +
-                cos(Math.toRadians(a.latitude)) * cos(Math.toRadians(b.latitude)) * sinLon * sinLon
-        return 2 * R * asin(sqrt(c))
-    }
+
 
     private fun snapCurrentPath() = intent {
         if (snapInFlight) return@intent  // 연타로 인한 중복 T-Map 호출 방지
         val raw = state.drawnPoints
-        Log.d("SnapDebug", "snapCurrentPath: points.size=${raw.size}, continuing=${state.isContinuing}")
+        Timber.d("snapCurrentPath: points.size=${raw.size}, continuing=${state.isContinuing}")
         if (raw.size < 2) {
             reduce { state.copy(drawingMode = if (state.isContinuing) DrawingMode.DONE else DrawingMode.IDLE) }
             return@intent
@@ -848,12 +770,12 @@ class MapViewModel @Inject constructor(
 
         if (myGen != snapGeneration) return@intent  // 취소되었거나 새 요청이 들어옴
 
-        Log.d("SnapDebug", "snapToRoad result: isSuccess=${result.isSuccess}, error=${result.exceptionOrNull()?.message}")
+        Timber.d("snapToRoad result: isSuccess=${result.isSuccess}, error=${result.exceptionOrNull()?.message}")
 
         result.fold(
             onSuccess = { snapResult ->
                 val newRoute = snapResult.route
-                Log.d("SnapDebug", "route size=${newRoute.size}, continuing=${state.isContinuing}")
+                Timber.d("route size=${newRoute.size}, continuing=${state.isContinuing}")
 
                 val updatedCheckResult = checkApiLimitUseCase()
                 val usage = when (updatedCheckResult) {
@@ -889,7 +811,7 @@ class MapViewModel @Inject constructor(
                 }
             },
             onFailure = { e ->
-                Log.e("SnapDebug", "snapToRoad FAILED: ${e.message}", e)
+                Timber.e(e, "snapToRoad FAILED: ${e.message}")
                 reduce {
                     state.copy(
                         drawingMode = if (state.snappedRoute.isNotEmpty()) DrawingMode.DONE else DrawingMode.IDLE,
@@ -917,7 +839,7 @@ class MapViewModel @Inject constructor(
             is CheckApiLimitUseCase.CheckResult.Allowed -> checkResult.usage
             is CheckApiLimitUseCase.CheckResult.Blocked -> checkResult.usage
         }
-        reduce { state.copy(tmapMaxLimitCount = 30 + usage.rechargedCount, tmapApiCallCount = usage.dailyCount) }
+        reduce { state.copy(tmapMaxLimitCount = DeviceUsage.DAILY_BASE_LIMIT + usage.rechargedCount, tmapApiCallCount = usage.dailyCount) }
         postSideEffect(MapSideEffect.ShowToast("API 한도가 10회 충전되었습니다"))
     }
 }
