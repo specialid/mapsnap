@@ -7,12 +7,10 @@ import javax.inject.Inject
 class IncrementApiCountUseCase @Inject constructor(
     private val repository: DeviceUsageRepository
 ) {
-    suspend operator fun invoke() {
-        val usage = repository.getUsage()
-        val updatedUsage = usage.copy(
-            dailyCount = usage.dailyCount + 1,
-            updatedAt = System.currentTimeMillis()
-        )
-        repository.updateUsage(updatedUsage)
+    /** @param count 실제로 발생한 T-Map HTTP 호출(청크) 수만큼 원자적으로 증가 */
+    suspend operator fun invoke(count: Int = 1) {
+        repeat(count) {
+            repository.incrementDailyCount()
+        }
     }
 }

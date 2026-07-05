@@ -56,7 +56,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -135,10 +137,19 @@ private fun segmentize(route: List<LatLng>, markers: List<LatLng>): List<List<La
     if (route.size < 2) return emptyList()
     if (markers.isEmpty()) return listOf(route)
 
-    val splitIndices = markers
-        .mapNotNull { m -> route.indexOfFirst { it == m }.takeIf { it > 0 && it < route.lastIndex } }
-        .sorted()
-        .distinct()
+    // 자기교차 경로 대비: 각 마커는 이전 마커 이후 구간에서만 탐색해
+    // 같은 좌표가 경로 위 다른 지점에 재등장할 때의 오매칭을 방지
+    val splitIndices = mutableListOf<Int>()
+    var searchFrom = 1
+    for (m in markers) {
+        if (searchFrom > route.lastIndex) break
+        val idxInTail = route.subList(searchFrom, route.size).indexOfFirst { it == m }
+        if (idxInTail < 0) continue
+        val absoluteIdx = searchFrom + idxInTail
+        if (absoluteIdx >= route.lastIndex) continue
+        splitIndices.add(absoluteIdx)
+        searchFrom = absoluteIdx + 1
+    }
 
     if (splitIndices.isEmpty()) return listOf(route)
 
@@ -154,8 +165,14 @@ private fun segmentize(route: List<LatLng>, markers: List<LatLng>): List<List<La
 
 enum class MarkerType { START, END, INTERMEDIATE }
 
-/** 마커 아이콘: 타입 및 선택 여부에 따라 원형 비트맵(글자 포함) 생성 */
+// 동일 (타입, 라벨, 선택 여부) 조합은 항상 같은 비트맵이므로 캐시 — 드래그 중 매 프레임 재생성 방지
+private val markerIconCache = mutableMapOf<Triple<MarkerType, String?, Boolean>, OverlayImage>()
+
+/** 마커 아이콘: 타입 및 선택 여부에 따라 원형 비트맵(글자 포함) 생성 (결과는 캐시됨) */
 private fun markerIcon(type: MarkerType, label: String?, selected: Boolean): OverlayImage {
+    val cacheKey = Triple(type, label, selected)
+    markerIconCache[cacheKey]?.let { return it }
+
     val size = 100
     val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
@@ -217,7 +234,7 @@ private fun markerIcon(type: MarkerType, label: String?, selected: Boolean): Ove
         canvas.drawText(label, size / 2f, size / 2f + textOffset, paint)
     }
 
-    return OverlayImage.fromBitmap(bitmap)
+    return OverlayImage.fromBitmap(bitmap).also { markerIconCache[cacheKey] = it }
 }
 
 @SuppressLint("MissingPermission")
@@ -447,7 +464,9 @@ fun MapScreen(
             // 경로를 마커 위치 기준으로 구간 분할 → 각 구간 별도 PathOverlay
             // 탭 → 삭제 다이얼로그 표시
             if (state.snappedRoute.size >= 2) {
-                val segments = segmentize(state.snappedRoute, state.routeMarkers)
+                val segments = remember(state.snappedRoute, state.routeMarkers) {
+                    segmentize(state.snappedRoute, state.routeMarkers)
+                }
                 segments.forEachIndexed { segIdx, seg ->
                     if (seg.size >= 2) {
                         val isSelected = state.selectedSegmentIndex == segIdx
@@ -541,6 +560,7 @@ fun MapScreen(
             drawingMode = if (isMapMoveMode) DrawingMode.IDLE else state.drawingMode,
             simplifiedPoints = state.simplifiedPoints,
             isLoop = state.isLoop,
+            pendingStrokes = state.pendingStrokes,
             cameraPositionState = cameraPositionState,
             naverMap = naverMap,
             onDrawStart = viewModel::onDrawStart,
@@ -564,11 +584,11 @@ fun MapScreen(
                 val projection = map.projection
                 val screenPoint = projection.toScreenLocation(markerPos)
                 val density = LocalContext.current.resources.displayMetrics.density
-                
+
                 // 더 큰 터치 조절점 크기 정의 (터치 영역 64dp, 시각 조절점 32dp)
                 val touchSizeDp = 64.dp
                 val touchSizePx = 64f * density
-                
+
                 Box(
                     modifier = Modifier
                         .offset {
@@ -587,7 +607,7 @@ fun MapScreen(
                                     val startScreenPoint = projection.toScreenLocation(startPos)
                                     accumulatedDrag = PointF(startScreenPoint.x, startScreenPoint.y)
                                 },
-                                
+
                                 onDrag = { change, dragAmount ->
                                     change.consume()
                                     accumulatedDrag?.let { drag ->
@@ -679,12 +699,20 @@ fun MapScreen(
             var tempInterval by remember { mutableStateOf(state.markerIntervalMeters) }
             var tempDrawnLevel by remember { mutableStateOf(nearestLevelIndex(state.epsilonDrawnDeg, DRAWN_LEVELS)) }
             var tempRouteLevel by remember { mutableStateOf(nearestLevelIndex(state.epsilonRouteDeg, ROUTE_LEVELS)) }
-            
+            var tempIncludeTimestamps by remember { mutableStateOf(state.includeTimestamps) }
+            var tempPaceMinutes by remember { mutableStateOf((state.runningPaceSecPerKm / 60).toString()) }
+            var tempPaceSeconds by remember { mutableStateOf((state.runningPaceSecPerKm % 60).toString()) }
+
             AlertDialog(
                 onDismissRequest = { showSettingsDialog = false },
                 title = { Text("설정", fontWeight = FontWeight.Bold) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .verticalScroll(rememberScrollState())
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                         Column {
                             Text("마커 생성 간격: ${tempInterval.toInt()}m", fontSize = 14.sp)
                             Slider(
@@ -714,11 +742,67 @@ fun MapScreen(
                                 steps = 3
                             )
                         }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("타임스탬프 포함", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Text("일부 앱이 시각 정보를 요구할 때만 켜세요", fontSize = 12.sp, color = Color.Gray)
+                            }
+                            Switch(
+                                checked = tempIncludeTimestamps,
+                                onCheckedChange = { tempIncludeTimestamps = it }
+                            )
+                        }
+                        if (tempIncludeTimestamps) {
+                            Column {
+                                Text("러닝 페이스 (분:초)", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextField(
+                                        value = tempPaceMinutes,
+                                        onValueChange = {
+                                            if (it.isEmpty() || it.all { c -> c.isDigit() }) {
+                                                tempPaceMinutes = it.take(2)
+                                            }
+                                        },
+                                        label = { Text("분", fontSize = 12.sp) },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp),
+                                        singleLine = true
+                                    )
+                                    Text(":", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                    TextField(
+                                        value = tempPaceSeconds,
+                                        onValueChange = {
+                                            if (it.isEmpty() || it.all { c -> c.isDigit() }) {
+                                                tempPaceSeconds = it.take(2)
+                                            }
+                                        },
+                                        label = { Text("초", fontSize = 12.sp) },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp),
+                                        singleLine = true
+                                    )
+                                }
+                                Text("범위: 4:00~8:00 (km당)", fontSize = 11.sp, color = Color.Gray)
+                            }
+                        }
                         TextButton(
                             onClick = {
                                 tempInterval = 80.0
                                 tempDrawnLevel = 2
                                 tempRouteLevel = 2
+                                tempIncludeTimestamps = false
+                                tempPaceMinutes = "6"
+                                tempPaceSeconds = "0"
                             },
                             modifier = Modifier.align(Alignment.End)
                         ) {
@@ -728,10 +812,15 @@ fun MapScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = {
+                        val minVal = tempPaceMinutes.toIntOrNull() ?: 6
+                        val secVal = tempPaceSeconds.toIntOrNull() ?: 0
+                        val totalSec = (minVal * 60 + secVal).coerceIn(240, 480)
                         viewModel.onUpdateSettings(
                             tempInterval,
                             DRAWN_LEVELS[tempDrawnLevel],
-                            ROUTE_LEVELS[tempRouteLevel]
+                            ROUTE_LEVELS[tempRouteLevel],
+                            tempIncludeTimestamps,
+                            totalSec
                         )
                         showSettingsDialog = false
                     }) {
@@ -902,11 +991,14 @@ fun MapScreen(
             }
         }
 
+        // snappedRoute가 바뀔 때만 재계산 — 선택/지도타입 등 무관한 리컴포지션에서 haversine 합산 반복 방지
+        val totalDistanceMeters = remember(state.snappedRoute) { state.totalDistanceMeters }
+
         BottomControls(
             drawingMode = state.drawingMode,
             hasPendingEdits = state.hasPendingEdits,
             canUndo = state.canUndo,
-            totalDistanceMeters = state.totalDistanceMeters,
+            totalDistanceMeters = totalDistanceMeters,
             routeMarkersCount = state.routeMarkers.size,
             onApplyEdits = viewModel::onApplyEdits,
             onUndo = viewModel::onUndo,

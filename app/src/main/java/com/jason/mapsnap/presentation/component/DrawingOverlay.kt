@@ -27,6 +27,7 @@ fun DrawingOverlay(
     drawingMode: DrawingMode,
     simplifiedPoints: List<LatLng>,
     isLoop: Boolean,
+    pendingStrokes: List<List<LatLng>> = emptyList(),
     cameraPositionState: CameraPositionState,
     naverMap: com.naver.maps.map.NaverMap?,
     onDrawStart: (LatLng) -> Unit,
@@ -80,13 +81,20 @@ fun DrawingOverlay(
         cameraPositionState.position
 
         when {
-            // 그리기 중: 손그림 원본 + 시작점 스냅존 원 표시
-            isDrawing && drawnLatLngs.size >= 2 -> {
-                val rawPoints = drawnLatLngs.mapNotNull { latLngToScreen(it, naverMap) }
-                if (rawPoints.size >= 2) {
-                    drawStrokePath(rawPoints, freehand = true)
-                    // 시작점 주변에 스냅존 안내 원 (30m 기준 시각 가이드)
-                    drawSnapZone(center = rawPoints.first())
+            // 그리기 중: 완료된 이전 스트로크 + 현재 손그림 원본 + 시작점 스냅존 원 표시
+            isDrawing -> {
+                // 배치 스냅 대기 중인 이전 스트로크들을 계속 표시 — 완료 전까지 사라지지 않음을 시각적으로 보장
+                pendingStrokes.forEach { stroke ->
+                    val strokePoints = stroke.mapNotNull { latLngToScreen(it, naverMap) }
+                    if (strokePoints.size >= 2) drawStrokePath(strokePoints, freehand = true)
+                }
+                if (drawnLatLngs.size >= 2) {
+                    val rawPoints = drawnLatLngs.mapNotNull { latLngToScreen(it, naverMap) }
+                    if (rawPoints.size >= 2) {
+                        drawStrokePath(rawPoints, freehand = true)
+                        // 시작점 주변에 스냅존 안내 원 (30m 기준 시각 가이드)
+                        drawSnapZone(center = rawPoints.first())
+                    }
                 }
             }
             // 처리 중: RDP 직선화된 선분들을 표시 (T-Map으로 전달되는 경로 미리보기)

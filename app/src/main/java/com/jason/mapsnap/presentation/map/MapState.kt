@@ -14,14 +14,14 @@ data class EditSnapshot(
     val routeEnd: LatLng?,
     val routeMarkers: List<LatLng>,
     val snappedRoute: List<LatLng>,
-    val dirtyStart: Int? = null,
-    val dirtyEnd: Int? = null
+    val dirtyRanges: List<IntRange> = emptyList()
 )
 
 @Immutable
 data class MapState(
     val drawingMode: DrawingMode = DrawingMode.IDLE,
     val drawnPoints: List<LatLng> = emptyList(),
+    val pendingStrokes: List<List<LatLng>> = emptyList(), // 완료 전 로컬 누적된 이전 스트로크들 — 배치 스냅용
     val simplifiedPoints: List<LatLng> = emptyList(), // RDP 직선화 결과 — PROCESSING 중 오버레이에 표시
     val snappedRoute: List<LatLng> = emptyList(),
     val isLoop: Boolean = false,
@@ -42,15 +42,18 @@ data class MapState(
     val naverMapApiCallCount: Int = 0,
     val hasPendingEdits: Boolean = false,
     val editHistory: List<EditSnapshot> = emptyList(),
-    val dirtyStart: Int? = null,
-    val dirtyEnd: Int? = null,
+    // 편집 클러스터별 재라우팅 대상 구간(관리 포인트 인덱스, inclusive) — 떨어진 편집은 별도 구간으로 유지되어
+    // Apply 시 서로 다른 클러스터 사이 미편집 구간까지 재라우팅에 포함되지 않는다
+    val dirtyRanges: List<IntRange> = emptyList(),
     val mapType: MapType = MapType.Basic,
     val markerIntervalMeters: Double = 80.0,
     val epsilonDrawnDeg: Double = 0.000135,
-    val epsilonRouteDeg: Double = 0.000072
+    val epsilonRouteDeg: Double = 0.000072,
+    val includeTimestamps: Boolean = false,
+    val runningPaceSecPerKm: Int = 360
 ) {
     val canUndo: Boolean get() = editHistory.isNotEmpty()
-    
+
     val totalDistanceMeters: Double get() = computeTotalDistance(snappedRoute)
 }
 

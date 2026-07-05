@@ -392,3 +392,84 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 
 ### 검증
 - `./gradlew.bat :app:compileDebugKotlin` BUILD SUCCESSFUL.
+
+---
+
+## GPX 호환성 보강 (2026-06-13)
+
+`implementation_plan.md` 기반. 그린 코스를 트랭글·Strava·Garmin 등에서 "동일 형태"로
+임포트하도록 GPX 출력 품질·완결성을 보강했다.
+
+### 변경
+- **신규** `domain/util/GeoUtils.kt` — 공용 haversine (ExportGpx 타임스탬프 계산용)
+- **신규** `domain/model/GpxExportOptions.kt` — includeTimestamps / paceSecPerKm / startTimeMillis
+- **개편** `domain/usecase/ExportGpxUseCase.kt`
+  - `<metadata>`(name/time/bounds) 블록 추가
+  - 좌표 `String.format(Locale.US, "%.6f", v)` — 6자리, 로케일 무관
+  - `<time>` 타임스탬프: 거리 기반 등속(점 밀도 무관), `includeTimestamps` 토글 시에만 출력
+  - 시각 포맷 `Instant.truncatedTo(SECONDS)` + `ISO_INSTANT`
+- **수정** `MapState` — includeTimestamps(기본 false) / runningPaceSecPerKm(기본 360=6:00/km)
+- **수정** `MapViewModel.onGpxUriSelected` — 빈 경로 가드(size<2), GPX 빌드 Dispatchers.Default 분리
+- **수정** `MapScreen` 설정 다이얼로그 — 타임스탬프 Switch + 페이스(분:초, 4:00~8:00) 입력
+
+### 의도적 제외 (결정)
+- `<ele>` 고도: T-Map 미제공 + 무료 API 비상업 약관 리스크 → 소비 앱 DEM 위임, 향후 옵션화
+- `<rte>`/`<wpt>`, 기존 haversine 4중 중복 전면치환, OSRM 폴백: 범위 외
+
+### 검증
+- `:app:compileDebugKotlin testDebugUnitTest` BUILD SUCCESSFUL
+- `ExportGpxUseCaseTest` 5/5 통과 (기본출력·bounds·타임스탬프·로케일·XML escape)
+- 감사 중 발견한 계획 외 변경(`markerIcon`의 `isFakeBoldText` 삭제) 되돌림
+
+---
+
+## 코드 검토 후속 조치 (2026-07-05)
+
+`code_review.md` 전면 검토(2026-07-05) 결과 중 심각도 높음 5건 및 API 절감 우선순위 상위 3건을 반영했다.
+
+### 버그 수정 (심각도 높음)
+- **`hasPendingEdits` 초기화 누락**: 지우기·다시 그리기·새 스냅 성공 시 `hasPendingEdits`/`dirtyStart`/`dirtyEnd`를 리셋하지 않아 방금 만든 깨끗한 경로가 "수정 대기"로 잘못 표시되던 문제 수정 (`MapViewModel`).
+- **API 카운트 단위 불일치**: `RouteRepository.PedestrianRoute(points, apiCallCount)` / `SnapToRoadUseCase.SnapResult(route, apiCallCount)`로 실제 T-Map HTTP 청크 호출 수를 끝까지 전달, `IncrementApiCountUseCase(count)`로 정확히 반영. 취소된 stale 요청도 실제 호출은 이미 발생했으므로 gen 체크 이전에 카운트.
+- **자기교차 경로 splice 오매칭 완화**: `spliceRoute`(ViewModel), `onApplyEdits`의 toIdx 탐색, `MapScreen.segmentize`를 "이전 지점 이후 구간에서만 탐색"하도록 수정해 그림 경로의 자기교차 지점에서 반대편 통과 지점과 오매칭되는 문제 완화(완전한 근본 해결은 인덱스 기반 상태 추적이 필요해 범위 외로 남김).
+- **연타 시 중복 T-Map 호출 방지**: `snapInFlight`/`applyInFlight` volatile 플래그로 `snapCurrentPath`/`onApplyEdits` 재진입 차단.
+- **DeviceUsage 원자성·영속성**: `DeviceUsageRepository.incrementDailyCount()`를 Firebase `runTransaction`으로 원자화, `localFallbackUsage`를 SharedPreferences(`mapsnap_usage_prefs`)에 영속화해 오프라인 시 앱 재시작으로 인한 한도 우회 가능성 축소.
+
+### API 절감 / 반복 경로 방지
+- **다획 배치 스냅**: 손가락을 뗄 때마다(스트로크마다) 즉시 스냅하던 방식을 변경 — 각 스트로크는 `MapState.pendingStrokes`에 로컬로만 적립되고, "완료" 버튼(`finishDrawing`)에서 모든 스트로크를 이어붙여 **1회만** T-Map을 호출한다. 다획 그림에서 API 호출 수가 획 수에 비례해 늘어나던 문제를 해소. `DrawingOverlay`는 완료 전 스트로크도 계속 화면에 표시해 사라진 것처럼 보이지 않도록 함.
+- **왕복 스퍼(반복 경로) 후처리**: `SnapToRoadUseCase.removeSpurs()` 추가. T-Map이 경유지 통과를 위해 만드는 "막다른 길 왕복" 구간을 이동거리/직선거리 비율로 탐지해 제거하되, 사용자가 실제로 지정한 웨이포인트 근처는 보존해 의도된 왕복 획은 유지.
+- **청크 경계 트리밍 조건부화**: `RouteRepositoryImpl`의 무조건 25m 트리밍을 `trimBoundaryArtifactIfLooping()`으로 교체 — 끝부분이 실제로 되돌아오는 루프(직선거리가 이동거리의 절반 이하)일 때만 트리밍하고, 단순 전진 구간은 그대로 두어 불필요한 직선 점프 생성을 방지.
+
+### 검증
+- `:app:compileDebugKotlin testDebugUnitTest` BUILD SUCCESSFUL
+
+---
+
+## 코드 검토 후속 조치 2차 (2026-07-05)
+
+`code_review.md` 중간 심각도 잔여 항목 중 4건을 중요도 순으로 추가 반영했다.
+
+- **CancellationException 처리 (2-6)**: `RouteRepositoryImpl.getPedestrianRoute`의 `runCatching`이 취소 예외까지 삼키던 것을 `.also { }`에서 재던지도록 수정. `MapViewModel.onGpxUriSelected`의 광범위 `catch (e: Exception)`도 동일하게 재던짐 추가. 구조적 코루틴 취소가 예외 삼킴으로 깨지지 않도록 함.
+- **근접 웨이포인트 병합 (2-3)**: `RouteRepositoryImpl`의 dedupe를 완전 일치(`!=`)에서 거리 기반(`MIN_WAYPOINT_SPACING_METERS = 10.0`)으로 변경. 실제 목적지(원본 마지막 웨이포인트)는 병합으로 소실되지 않도록 별도 보존 로직 추가. 청크 수 절감 및 미세 왕복 방지에 기여.
+- **마커 아이콘 비트맵 캐싱 (2-7)**: `MapScreen.markerIcon()`을 (타입, 라벨, 선택 여부) 키의 파일 스코프 캐시로 감싸, 드래그 중 매 프레임 비트맵을 재생성하던 GC 압박 제거.
+- **Compose 리컴포지션 최적화 (2-8)**: `segmentize()` 호출을 `remember(snappedRoute, routeMarkers)`로 감싸고, `state.totalDistanceMeters` getter 호출도 `remember(snappedRoute)`로 감싸 무관한 리컴포지션(마커 선택, 지도 타입 전환 등)에서의 재계산을 방지.
+
+### 검증
+- `:app:compileDebugKotlin testDebugUnitTest` BUILD SUCCESSFUL
+
+---
+
+## 코드 검토 후속 조치 3차 (2026-07-05)
+
+`code_review.md` 2-4(dirty range 리스트화)를 추가 반영했다. 서로 멀리 떨어진 편집 클러스터가 있을 때 그 사이 미편집 구간까지 재라우팅에 끌려들어가던 문제를 해소하는 구조 변경.
+
+- **`MapState`**: `dirtyStart: Int?`/`dirtyEnd: Int?` 단일 스팬을 `dirtyRanges: List<IntRange>`(편집 클러스터별 구간 목록)로 교체. `EditSnapshot`도 동일하게 변경해 Undo가 클러스터 목록 전체를 복원하도록 함.
+- **`MapViewModel.mergeDirtyRange`**: 새로 편집된 관리 포인트 인덱스를 인접(버퍼 2 이내) 기존 구간과 병합하거나, 멀리 떨어져 있으면 새 구간으로 추가. 마커 드래그/지도 탭 이동 계열 함수들(`onMarkerDragged`, `onStartMarkerDragged`, `onEndMarkerDragged`, `onMapTapped`)이 이 헬퍼로 통일됨.
+- **`MapViewModel.shiftDirtyRangesAfterRemoval`**: 마커/구간 삭제로 뒤쪽 인덱스가 당겨질 때 기존 dirtyRanges 전체를 보정하고 삭제 지점의 새 이음매를 병합 (`onDeleteMarkerConfirmed`, `onDeleteSegmentConfirmed`).
+- **`onApplyEdits` 재작성**: 단일 min~max 웨이포인트 추출 대신, 클러스터별로 별도 T-Map 호출(`snapToRoad.fromWaypoints`)을 수행. 여러 구간을 처리할 때는 **끝 인덱스가 큰 구간(뒤쪽)부터** 적용해, 앞쪽(왼쪽) 구간의 원본 인덱스가 뒤쪽 구간의 스플라이스로 무효화되지 않도록 함. 실패한 구간이 있으면 전체를 롤백(부분 반영 없음)해 상태 일관성을 유지. API 호출 수는 클러스터별 합산 후 한 번에 반영.
+- 타입 버그 수정: `List<IntRange> + IntRange(...)`가 IntRange 자체의 `Iterable<Int>` 특성 때문에 원소 스프레드로 오인되어 `List<Any>`로 추론되는 Kotlin 함정 발견 → `listOf(...)`로 감싸 명시적 단일 원소 추가로 수정.
+
+### 검증
+- `:app:compileDebugKotlin testDebugUnitTest` BUILD SUCCESSFUL
+
+### 남은 과제 (code_review.md 기준)
+- 3장 정리 대상 전반(미사용 `onMapTapped`, 릴리즈 로그 노출, Firebase 보안 규칙 확인, `editHistory` 무제한 누적, `onDrawPoint` O(n²) 등).

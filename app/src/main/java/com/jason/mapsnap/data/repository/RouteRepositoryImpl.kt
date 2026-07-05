@@ -6,6 +6,7 @@ import com.jason.mapsnap.data.remote.dto.TmapRequest
 import com.jason.mapsnap.data.tracker.ApiCallTracker
 import com.jason.mapsnap.domain.repository.RouteRepository
 import com.naver.maps.geometry.LatLng
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import kotlin.math.asin
 import kotlin.math.cos
@@ -20,6 +21,8 @@ class RouteRepositoryImpl @Inject constructor(
     companion object {
         /** 청크 경계 루프 아티팩트 제거를 위해 각 청크 끝에서 트리밍할 거리 (미터) */
         private const val CHUNK_TRIM_METERS = 25.0
+        /** 이보다 가까운 연속 웨이포인트는 병합 — 청크 수·왕복 유발 방지 (시작/끝점은 항상 보존) */
+        private const val MIN_WAYPOINT_SPACING_METERS = 10.0
     }
 
     private fun haversine(a: LatLng, b: LatLng): Double {
@@ -35,11 +38,21 @@ class RouteRepositoryImpl @Inject constructor(
 
     override suspend fun getPedestrianRoute(
         waypoints: List<LatLng>
-    ): Result<List<LatLng>> = runCatching {
+    ): Result<RouteRepository.PedestrianRoute> = runCatching {
+        // 완전 일치가 아니어도 너무 가까운 연속 웨이포인트는 병합 — 청크 수 절감 및 미세 왕복 방지
         val uniqueWaypoints = mutableListOf<LatLng>()
         for (pt in waypoints) {
-            if (uniqueWaypoints.isEmpty() || uniqueWaypoints.last() != pt) {
+            if (uniqueWaypoints.isEmpty() || haversine(uniqueWaypoints.last(), pt) > MIN_WAYPOINT_SPACING_METERS) {
                 uniqueWaypoints.add(pt)
+            }
+        }
+        // 실제 목적지(원본 마지막 웨이포인트)는 병합으로 소실되지 않도록 항상 보존
+        val destination = waypoints.last()
+        if (uniqueWaypoints.isEmpty() || uniqueWaypoints.last() != destination) {
+            if (uniqueWaypoints.isNotEmpty() && haversine(uniqueWaypoints.last(), destination) <= MIN_WAYPOINT_SPACING_METERS) {
+                uniqueWaypoints[uniqueWaypoints.lastIndex] = destination
+            } else {
+                uniqueWaypoints.add(destination)
             }
         }
 
@@ -113,14 +126,10 @@ class RouteRepositoryImpl @Inject constructor(
                 }
             }
 
-            // 마지막 청크가 아니면 끝 20m 트리밍:
-            // T-Map이 청크 경계 지점 주변을 맴도는 루프 아티팩트를 제거한다
+            // 마지막 청크가 아니면 끝부분이 실제 루프 아티팩트일 때만 트리밍한다
+            // (단순 전진 경로까지 잘라내면 직선 점프가 생기므로 조건부로만 적용)
             if (chunkIndex < chunks.lastIndex) {
-                var trimmed = 0.0
-                while (allPoints.size > 1 && trimmed < CHUNK_TRIM_METERS) {
-                    trimmed += haversine(allPoints[allPoints.lastIndex - 1], allPoints.last())
-                    allPoints.removeAt(allPoints.lastIndex)
-                }
+                trimBoundaryArtifactIfLooping(allPoints)
             }
         }
 
@@ -128,6 +137,36 @@ class RouteRepositoryImpl @Inject constructor(
             error("경로를 찾을 수 없습니다")
         }
 
-        allPoints
+        RouteRepository.PedestrianRoute(points = allPoints, apiCallCount = chunks.size)
+    }.also { result ->
+        // runCatching은 CancellationException도 삼키므로, 구조적 취소가 깨지지 않도록 재던짐
+        val e = result.exceptionOrNull()
+        if (e is CancellationException) throw e
+    }
+
+    /**
+     * 청크 경계 끝부분이 실제로 되돌아오는 루프 아티팩트일 때만 트리밍한다.
+     * 직선 거리(direct)가 이동 거리(traveled)의 절반을 넘으면(즉 대체로 전진 중이면) 정상 경로로 보고 그대로 둔다.
+     * 무조건 트리밍하면 건물·하천을 관통하는 직선 점프를 만들 수 있어 조건부로만 적용한다.
+     */
+    private fun trimBoundaryArtifactIfLooping(points: MutableList<LatLng>) {
+        if (points.size < 3) return
+        val endIdx = points.lastIndex
+        var traveled = 0.0
+        var far = endIdx
+        while (far > 0 && traveled < CHUNK_TRIM_METERS) {
+            traveled += haversine(points[far - 1], points[far])
+            far--
+        }
+        if (far == endIdx) return
+
+        val direct = haversine(points[far], points[endIdx])
+        if (direct > traveled * 0.5) return // 대체로 전진 중 — 아티팩트 아님, 트리밍하지 않음
+
+        var trimmed = 0.0
+        while (points.size > 1 && trimmed < CHUNK_TRIM_METERS) {
+            trimmed += haversine(points[points.lastIndex - 1], points.last())
+            points.removeAt(points.lastIndex)
+        }
     }
 }
