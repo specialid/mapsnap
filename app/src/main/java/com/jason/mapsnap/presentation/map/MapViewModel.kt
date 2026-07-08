@@ -6,7 +6,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jason.mapsnap.data.model.DeviceUsage
 import com.jason.mapsnap.data.tracker.ApiCallTracker
+import com.jason.mapsnap.domain.model.AppSettings
 import com.jason.mapsnap.domain.model.GpxExportOptions
+import com.jason.mapsnap.domain.model.SavedRoute
+import com.jason.mapsnap.domain.repository.SavedRouteRepository
+import com.jason.mapsnap.domain.repository.SettingsRepository
 import com.jason.mapsnap.domain.usecase.CheckApiLimitUseCase
 import com.jason.mapsnap.domain.usecase.IncrementApiCountUseCase
 import com.jason.mapsnap.domain.usecase.RechargeApiLimitUseCase
@@ -14,6 +18,7 @@ import com.jason.mapsnap.domain.usecase.ExportGpxUseCase
 import com.jason.mapsnap.domain.usecase.SimplifyPathUseCase
 import com.jason.mapsnap.domain.usecase.SnapToRoadUseCase
 import com.jason.mapsnap.domain.util.GeoUtils.haversineMeters
+import java.util.UUID
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.map.compose.MapType
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,7 +39,9 @@ class MapViewModel @Inject constructor(
     private val apiCallTracker: ApiCallTracker,
     private val checkApiLimitUseCase: CheckApiLimitUseCase,
     private val incrementApiCountUseCase: IncrementApiCountUseCase,
-    private val rechargeApiLimitUseCase: RechargeApiLimitUseCase
+    private val rechargeApiLimitUseCase: RechargeApiLimitUseCase,
+    private val settingsRepository: SettingsRepository,
+    private val savedRouteRepository: SavedRouteRepository
 ) : ViewModel(), ContainerHost<MapState, MapSideEffect> {
 
     override val container = container<MapState, MapSideEffect>(MapState())
@@ -85,6 +92,20 @@ class MapViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            val settings = settingsRepository.getSettings()
+            intent {
+                reduce {
+                    state.copy(
+                        markerIntervalMeters = settings.markerIntervalMeters,
+                        epsilonDrawnDeg = settings.epsilonDrawnDeg,
+                        epsilonRouteDeg = settings.epsilonRouteDeg,
+                        includeTimestamps = settings.includeTimestamps,
+                        runningPaceSecPerKm = settings.runningPaceSecPerKm
+                    )
+                }
+            }
+        }
     }
 
     fun onNaverMapLoaded() = intent {
@@ -115,6 +136,17 @@ class MapViewModel @Inject constructor(
                 epsilonRouteDeg = epsilonRoute,
                 includeTimestamps = includeTimestamps,
                 runningPaceSecPerKm = runningPaceSecPerKm
+            )
+        }
+        withContext(Dispatchers.IO) {
+            settingsRepository.saveSettings(
+                AppSettings(
+                    markerIntervalMeters = interval,
+                    epsilonDrawnDeg = epsilonDrawn,
+                    epsilonRouteDeg = epsilonRoute,
+                    includeTimestamps = includeTimestamps,
+                    runningPaceSecPerKm = runningPaceSecPerKm
+                )
             )
         }
     }
@@ -841,5 +873,75 @@ class MapViewModel @Inject constructor(
         }
         reduce { state.copy(tmapMaxLimitCount = DeviceUsage.DAILY_BASE_LIMIT + usage.rechargedCount, tmapApiCallCount = usage.dailyCount) }
         postSideEffect(MapSideEffect.ShowToast("API 한도가 10회 충전되었습니다"))
+    }
+
+    fun onOpenSaveRouteDialog() = intent {
+        if (state.snappedRoute.size < 2) {
+            postSideEffect(MapSideEffect.ShowToast("저장할 경로가 없습니다"))
+            return@intent
+        }
+        reduce { state.copy(showSaveRouteDialog = true) }
+    }
+
+    fun onSaveRouteDismissed() = intent {
+        reduce { state.copy(showSaveRouteDialog = false) }
+    }
+
+    fun onSaveRouteConfirmed(name: String) = intent {
+        val start = state.routeStart ?: return@intent
+        val end = state.routeEnd ?: return@intent
+        val route = SavedRoute(
+            id = UUID.randomUUID().toString(),
+            name = name.trim().ifEmpty { "경로" },
+            createdAt = System.currentTimeMillis(),
+            routeStart = start,
+            routeEnd = end,
+            routeMarkers = state.routeMarkers,
+            snappedRoute = state.snappedRoute,
+            distanceMeters = state.totalDistanceMeters
+        )
+        withContext(Dispatchers.IO) { savedRouteRepository.save(route) }
+        reduce { state.copy(showSaveRouteDialog = false) }
+        postSideEffect(MapSideEffect.ShowToast("경로가 저장되었습니다"))
+    }
+
+    /** 저장된 경로 목록 다이얼로그 표시: 매번 최신 목록을 다시 불러온다 */
+    fun onOpenLoadRouteDialog() = intent {
+        val routes = withContext(Dispatchers.IO) { savedRouteRepository.getAll() }
+        reduce { state.copy(savedRoutes = routes, showLoadRouteDialog = true) }
+    }
+
+    fun onLoadRouteDialogDismissed() = intent {
+        reduce { state.copy(showLoadRouteDialog = false) }
+    }
+
+    /** 저장된 경로를 현재 편집 상태로 불러온다 — 새로 그린 것처럼 DONE 모드로 진입 */
+    fun onLoadRouteSelected(route: SavedRoute) = intent {
+        reduce {
+            state.copy(
+                drawingMode = DrawingMode.DONE,
+                isContinuing = false,
+                drawnPoints = emptyList(),
+                pendingStrokes = emptyList(),
+                simplifiedPoints = emptyList(),
+                snappedRoute = route.snappedRoute,
+                routeMarkers = route.routeMarkers,
+                routeStart = route.routeStart,
+                routeEnd = route.routeEnd,
+                selectedMarkerIndex = -1,
+                selectedSegmentIndex = -1,
+                editHistory = emptyList(),
+                hasPendingEdits = false,
+                dirtyRanges = emptyList(),
+                showLoadRouteDialog = false,
+                error = null
+            )
+        }
+        postSideEffect(MapSideEffect.ShowToast("'${route.name}' 경로를 불러왔습니다"))
+    }
+
+    fun onDeleteSavedRoute(id: String) = intent {
+        withContext(Dispatchers.IO) { savedRouteRepository.delete(id) }
+        reduce { state.copy(savedRoutes = state.savedRoutes.filterNot { it.id == id }) }
     }
 }

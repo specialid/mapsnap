@@ -1,6 +1,7 @@
 package com.jason.mapsnap.presentation.map
 
 import androidx.compose.runtime.Immutable
+import com.jason.mapsnap.domain.model.SavedRoute
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.map.compose.MapType
 import kotlin.math.asin
@@ -51,7 +52,10 @@ data class MapState(
     val epsilonDrawnDeg: Double = 0.000135,
     val epsilonRouteDeg: Double = 0.000072,
     val includeTimestamps: Boolean = false,
-    val runningPaceSecPerKm: Int = 360
+    val runningPaceSecPerKm: Int = 360,
+    val savedRoutes: List<SavedRoute> = emptyList(),
+    val showSaveRouteDialog: Boolean = false,
+    val showLoadRouteDialog: Boolean = false
 ) {
     val canUndo: Boolean get() = editHistory.isNotEmpty()
 

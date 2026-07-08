@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -30,12 +32,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.ModalDrawerSheet
@@ -384,6 +388,21 @@ fun MapScreen(
                         moveToCurrentLocation()
                     },
                     icon = { Icon(Icons.Default.MyLocation, contentDescription = null) },
+                    colors = NavigationDrawerItemDefaults.colors(
+                        unselectedContainerColor = Color.Transparent,
+                        unselectedTextColor = Color.White,
+                        unselectedIconColor = Color.White
+                    ),
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+                NavigationDrawerItem(
+                    label = { Text("저장된 경로") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        viewModel.onOpenLoadRouteDialog()
+                    },
+                    icon = { Icon(Icons.Default.Folder, contentDescription = null) },
                     colors = NavigationDrawerItemDefaults.colors(
                         unselectedContainerColor = Color.Transparent,
                         unselectedTextColor = Color.White,
@@ -987,6 +1006,25 @@ fun MapScreen(
                     tint = MaterialTheme.colorScheme.onSecondaryContainer
                 )
             }
+
+            // 경로 저장 FAB — 완성된 경로가 있을 때(DONE)만 노출
+            AnimatedVisibility(
+                visible = state.drawingMode == DrawingMode.DONE,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                FloatingActionButton(
+                    onClick = { viewModel.onOpenSaveRouteDialog() },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Save,
+                        contentDescription = "경로 저장",
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
         }
 
         // snappedRoute가 바뀔 때만 재계산 — 선택/지도타입 등 무관한 리컴포지션에서 haversine 합산 반복 방지
@@ -1153,6 +1191,93 @@ fun MapScreen(
                     }
                 }
             }
+        }
+
+        // 경로 저장 다이얼로그 — 이름 입력
+        if (state.showSaveRouteDialog) {
+            var routeName by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { viewModel.onSaveRouteDismissed() },
+                title = { Text("경로 저장", fontWeight = FontWeight.Bold) },
+                text = {
+                    TextField(
+                        value = routeName,
+                        onValueChange = { routeName = it },
+                        label = { Text("경로 이름") },
+                        placeholder = { Text("예: 우리집 앞 하트 경로") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.onSaveRouteConfirmed(routeName) }) {
+                        Text("저장")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.onSaveRouteDismissed() }) {
+                        Text("취소")
+                    }
+                }
+            )
+        }
+
+        // 저장된 경로 불러오기 다이얼로그 — 목록 + 삭제
+        if (state.showLoadRouteDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.onLoadRouteDialogDismissed() },
+                title = { Text("저장된 경로", fontWeight = FontWeight.Bold) },
+                text = {
+                    if (state.savedRoutes.isEmpty()) {
+                        Text("저장된 경로가 없습니다", color = Color.Gray)
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .heightIn(max = 360.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            state.savedRoutes.forEach { route ->
+                                val dateStr = remember(route.createdAt) {
+                                    java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                                        .format(java.util.Date(route.createdAt))
+                                }
+                                val distanceStr = if (route.distanceMeters >= 1000) {
+                                    String.format(java.util.Locale.getDefault(), "%.2fkm", route.distanceMeters / 1000.0)
+                                } else {
+                                    String.format(java.util.Locale.getDefault(), "%dm", route.distanceMeters.toInt())
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { viewModel.onLoadRouteSelected(route) }
+                                        .padding(vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(route.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                        Text("$dateStr · $distanceStr", fontSize = 12.sp, color = Color.Gray)
+                                    }
+                                    IconButton(onClick = { viewModel.onDeleteSavedRoute(route.id) }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "삭제",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                                HorizontalDivider(color = Color(0x1AFFFFFF))
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.onLoadRouteDialogDismissed() }) {
+                        Text("닫기")
+                    }
+                }
+            )
         }
     }
 }

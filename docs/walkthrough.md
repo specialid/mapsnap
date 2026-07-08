@@ -473,3 +473,31 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 
 ### 남은 과제 (code_review.md 기준)
 - 3장 정리 대상 전반(미사용 `onMapTapped`, 릴리즈 로그 노출, Firebase 보안 규칙 확인, `editHistory` 무제한 누적, `onDrawPoint` O(n²) 등).
+
+---
+
+## 경로 저장/불러오기 및 설정 영속화 (2026-07-06)
+
+앱 재시작 시 편집 중이던 경로와 사용자 설정이 전부 초기화되는 문제를 해소하기 위해 로컬 영속화 계층을 신규 도입했다. Room 대신 기존 코드베이스 관례(DeviceUsageRepositoryImpl·onboarding 플래그가 이미 SharedPreferences 사용)를 따라 SharedPreferences + Gson으로 구현해 신규 의존성 추가 없이 처리했다.
+
+### 신규 파일
+- `domain/model/AppSettings.kt` — 영속화 대상 설정 값 객체(마커 간격, epsilon, 타임스탬프, 페이스)
+- `domain/repository/SettingsRepository.kt` / `data/repository/SettingsRepositoryImpl.kt` — SharedPreferences 기반 설정 저장소(`mapsnap_settings_prefs`)
+- `domain/model/SavedRoute.kt` — 저장된 경로 도메인 모델(LatLng 기반)
+- `domain/repository/SavedRouteRepository.kt` / `data/repository/SavedRouteRepositoryImpl.kt` — 저장 경로 CRUD(`mapsnap_saved_routes_prefs`)
+- `data/model/SavedRouteEntity.kt` — Gson 직렬화용 순수 DTO(LatLng 대신 위경도 `List<Double>` 사용 — Gson이 서드파티 클래스를 리플렉션으로 역직렬화할 때의 불확실성을 피하기 위함)
+
+### 설정 영속화
+- `MapViewModel` 생성자에 `SettingsRepository` 주입, `init` 블록에서 저장된 설정을 로드해 초기 `MapState`에 반영.
+- `onUpdateSettings()`가 상태 반영과 동시에 `Dispatchers.IO`에서 `saveSettings()` 호출 — Orbit MVI의 "I/O는 intent 밖 reduce에서 하지 않는다" 원칙 준수.
+
+### 경로 저장/불러오기
+- `MapState`에 `savedRoutes: List<SavedRoute>`, `showSaveRouteDialog`, `showLoadRouteDialog` 추가.
+- 신규 인텐트: `onOpenSaveRouteDialog`(빈 경로 가드) → `onSaveRouteConfirmed(name)`(UUID 발급, `state.totalDistanceMeters` 스냅샷 저장) / `onOpenLoadRouteDialog`(호출마다 최신 목록 재조회) → `onLoadRouteSelected(route)`(DONE 모드로 즉시 진입, 편집 이력·dirtyRanges 초기화) / `onDeleteSavedRoute(id)`.
+- UI: 지도 우측 상단에 "경로 저장" FAB를 `DrawingMode.DONE`일 때만 노출(기존 지도 타입 토글 FAB 패턴 재사용). 좌측 드로어에 "저장된 경로" 메뉴 추가. 저장 다이얼로그(이름 입력)와 불러오기 다이얼로그(목록 + 항목별 삭제 버튼) 추가.
+- 불러온 경로는 API 호출 없이 로컬 데이터만으로 즉시 복원되므로, 자주 쓰는 경로를 반복 재현할 때 T-Map 호출이 전혀 들지 않는다.
+
+### 검증
+- `:app:compileDebugKotlin testDebugUnitTest` BUILD SUCCESSFUL
+- 에뮬레이터/실기기 환경이 없어 실제 UI 동작(다이얼로그 렌더링, FAB 노출 조건 등)은 육안 확인하지 못함 — 코드 리뷰와 컴파일 검증만 수행됨. 실기기 확인 필요.
+
