@@ -501,3 +501,38 @@ DONE ──[이어 그리기(+) 버튼]──► DRAWING (isContinuing=true)
 - `:app:compileDebugKotlin testDebugUnitTest` BUILD SUCCESSFUL
 - 에뮬레이터/실기기 환경이 없어 실제 UI 동작(다이얼로그 렌더링, FAB 노출 조건 등)은 육안 확인하지 못함 — 코드 리뷰와 컴파일 검증만 수행됨. 실기기 확인 필요.
 
+---
+
+## 왕복 스퍼 제거 로직 개선 — 그린 선 기반 의도 판별 (2026-07-07)
+
+사용자 실기기 스크린샷 2건으로 확인된 문제. 처음 그리자마자 경로 중간에 막다른 골목으로
+찔러 들어갔다 같은 길로 되돌아 나오는 왕복 스텁이 생겼다.
+
+### 원인
+- 손그림에서 자동 샘플링된 웨이포인트가 도로망 밖(단지 안쪽 등)에 찍히면 T-Map이 경유지
+  통과를 위해 골목 왕복을 생성한다.
+- 기존 `removeSpurs()`는 "웨이포인트 근처 구간 보존" 규칙이라, **스퍼의 끝점이 바로 그
+  웨이포인트여서 스퍼를 만든 원인이 자기 자신을 보호**하는 구조적 딜레마가 있었다.
+- `maxSpurMeters = 60.0`도 실제 골목 왕복(왕복 100~300m)보다 작아 탐지 자체가 실패했다.
+
+### 수정 (`SnapToRoadUseCase.kt`)
+- **의도 판별 기준 교체**: 웨이포인트 근접 대신 사용자가 그린 원본 선(RDP 단순화본)의 모양으로
+  판별한다. 의도된 왕복 획(글자 'T'의 세로획 등)은 그린 선에 급반전(120° 초과) 꼭짓점이 남고
+  RDP가 반전 꼭짓점을 반드시 보존하므로 신뢰 가능한 신호다. 아티팩트는 그린 선이 스쳐 지나가
+  반전 꼭짓점이 없다 (`drawnPathReversesNear`, `turnCosine` — cosLat 보정).
+- **corridor 폭 검사** (`isPureOutAndBack`, 18m): 나간 길과 돌아오는 길이 좁게 포개지는 순수
+  왕복만 스퍼 후보로 보고, 폭이 있는 작은 고리(의도적 루프)는 보존.
+- **탐지 한도 상향**: `maxSpurMeters` 60 → 200 (`MAX_SPUR_TRAVEL_METERS`).
+- **호출 경로 분리**: 최초 스냅(`invoke`)은 `drawnPath = simplified`를 넘겨 새 판별을 쓰고,
+  마커 재라우팅(`fromWaypoints`)은 그린 선 정보가 없으므로 기존 웨이포인트 보호를 유지.
+
+### 알려진 트레이드오프
+- 폭 18m 이내로 포개지는 지그재그 계단(스위치백)을 그린 선이 직선으로 스쳐 지나간 경우,
+  드물게 계단 구간이 직선화될 수 있다. GPX 아트 목적상 그린 선 충실도가 우선이라 수용.
+- 이어 그리기 접합부(combined)에는 despur가 적용되지 않는 문제는 별도 후속 과제로 남김.
+
+### 검증
+- 신규 `SnapToRoadUseCaseTest` 2건 통과 — 아티팩트 스퍼 제거(`artifactSpurIsRemoved`),
+  의도된 왕복 획 보존(`intendedRetraceIsKept`). fake RouteRepository로 파이프라인 전체 검증.
+- `:app:compileDebugKotlin testDebugUnitTest` BUILD SUCCESSFUL.
+- 실기기 확인 필요: 스크린샷과 같은 지역에서 재현 여부, 왕복 획 포함 그림에서 획 보존 여부.

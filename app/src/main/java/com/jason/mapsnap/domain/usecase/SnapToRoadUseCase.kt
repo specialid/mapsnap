@@ -54,7 +54,8 @@ class SnapToRoadUseCase @Inject constructor(
         // T-Map 결과의 미세 우회 구간 제거 — 도로 꺾임은 보존, 불필요한 곡선만 정리
         return routeResult.map { pedestrianRoute ->
             val despurred = withContext(Dispatchers.Default) {
-                removeSpurs(pedestrianRoute.points, waypoints)
+                // 그린 원본 선(simplified)을 함께 넘겨 의도된 왕복 획과 아티팩트 스퍼를 구별
+                removeSpurs(pedestrianRoute.points, waypoints, drawnPath = simplified)
             }
             val route = withContext(Dispatchers.Default) {
                 simplifyPath(despurred, epsilonRouteDeg)
@@ -86,21 +87,90 @@ class SnapToRoadUseCase @Inject constructor(
         }
     }
 
+    private companion object {
+        /** 왕복 스퍼로 간주할 최대 이동 거리(왕복 누적, m) — 도심 골목 왕복은 100~300m가 흔함 */
+        const val MAX_SPUR_TRAVEL_METERS = 200.0
+        /** 스퍼 복귀 판정 반경 및 웨이포인트 보호 반경(m) */
+        const val SPUR_CLOSE_METERS = 12.0
+        /** 나간 길과 돌아오는 길이 이 폭 안에 포개지면 순수 왕복(corridor)으로 판정(m) */
+        const val SPUR_CORRIDOR_WIDTH_METERS = 18.0
+        /** 그린 선 꼭짓점이 스퍼 팁에서 이 거리 안에 있어야 의도된 획일 가능성 인정(m) */
+        const val SPUR_TIP_MATCH_METERS = 35.0
+    }
+
     /**
      * T-Map이 경유지 통과를 위해 만든 "막다른 길 왕복(스퍼)"을 제거한다.
-     * i 지점에서 짧게 나갔다가 i 근처로 되돌아오는 구간을 발견하면 건너뛴다.
-     * 단, [protectedPoints](사용자가 실제로 지정한 웨이포인트) 근처를 통과하는 구간은
-     * 의도된 경로이므로 보존한다.
+     * i 지점에서 나갔다가 i 근처로 같은 길을 되밟아 돌아오는 순수 왕복 구간을 찾아 건너뛴다.
+     *
+     * 보존 규칙.
+     * - 폭이 있는 작은 고리(의도적으로 그린 루프)는 왕복이 아니므로 보존한다.
+     * - [drawnPath]가 있으면(최초 스냅) 그린 선이 스퍼 팁 근처 꼭짓점에서 급반전하는 경우
+     *   (글자 획처럼 의도된 왕복)만 보존한다. 웨이포인트는 그린 선에서 자동 샘플링된 점이라
+     *   웨이포인트 근접만으로는 의도를 판별할 수 없다 — 스퍼를 유발한 웨이포인트가 자기
+     *   자신을 보호하는 딜레마가 생기기 때문.
+     * - [drawnPath]가 없으면(마커 재라우팅) 기존처럼 웨이포인트 근접 구간을 보존한다.
      */
     private fun removeSpurs(
         route: List<LatLng>,
         protectedPoints: List<LatLng>,
-        maxSpurMeters: Double = 60.0,
-        closeThresholdMeters: Double = 12.0
+        drawnPath: List<LatLng>? = null,
+        maxSpurMeters: Double = MAX_SPUR_TRAVEL_METERS,
+        closeThresholdMeters: Double = SPUR_CLOSE_METERS
     ): List<LatLng> {
         if (route.size < 4) return route
 
-        fun isProtected(pt: LatLng) = protectedPoints.any { haversineMeters(it, pt) <= closeThresholdMeters }
+        fun isNearWaypoint(pt: LatLng) = protectedPoints.any { haversineMeters(it, pt) <= closeThresholdMeters }
+
+        // 나간 길과 돌아오는 길이 좁은 폭 안에 포개지는지 — 폭이 있으면 고리(루프)로 보고 스퍼가 아님
+        fun isPureOutAndBack(interior: List<LatLng>, tipIdx: Int): Boolean {
+            val outgoing = interior.subList(0, tipIdx + 1)
+            for (k in tipIdx until interior.size) {
+                val minDist = outgoing.minOf { haversineMeters(it, interior[k]) }
+                if (minDist > SPUR_CORRIDOR_WIDTH_METERS) return false
+            }
+            return true
+        }
+
+        // 그린 원본 선이 팁 근처 꼭짓점에서 진행 방향을 급반전(120° 초과)하면 의도된 왕복 획으로 본다.
+        // 의도된 왕복이라면 RDP 단순화가 반전 꼭짓점을 반드시 남기므로, 근처에 꼭짓점이 없으면 아티팩트다.
+        fun drawnPathReversesNear(tip: LatLng): Boolean {
+            val path = drawnPath ?: return false
+            var nearestIdx = -1
+            var nearestDist = Double.MAX_VALUE
+            for (idx in path.indices) {
+                val d = haversineMeters(path[idx], tip)
+                if (d < nearestDist) {
+                    nearestDist = d
+                    nearestIdx = idx
+                }
+            }
+            if (nearestDist > SPUR_TIP_MATCH_METERS) return false
+            // 그린 선의 시작/끝 부근이면 방향 판단 근거가 없으므로 보수적으로 보존
+            if (nearestIdx <= 0 || nearestIdx >= path.lastIndex) return true
+            for (k in maxOf(1, nearestIdx - 2)..minOf(path.lastIndex - 1, nearestIdx + 2)) {
+                if (turnCosine(path[k - 1], path[k], path[k + 1]) < -0.5) return true
+            }
+            return false
+        }
+
+        fun shouldKeepSpur(interior: List<LatLng>, anchor: LatLng): Boolean {
+            if (interior.isEmpty()) return false
+            var tipIdx = 0
+            var tipDist = -1.0
+            interior.forEachIndexed { idx, pt ->
+                val d = haversineMeters(anchor, pt)
+                if (d > tipDist) {
+                    tipDist = d
+                    tipIdx = idx
+                }
+            }
+            if (!isPureOutAndBack(interior, tipIdx)) return true
+            return if (drawnPath != null) {
+                drawnPathReversesNear(interior[tipIdx])
+            } else {
+                interior.any { isNearWaypoint(it) }
+            }
+        }
 
         val result = mutableListOf(route[0])
         var i = 0
@@ -118,7 +188,7 @@ class SnapToRoadUseCase @Inject constructor(
                 j++
             }
             if (spurEnd in (i + 1) until route.size &&
-                (i + 1 until spurEnd).none { isProtected(route[it]) }
+                !shouldKeepSpur(route.subList(i + 1, spurEnd), route[i])
             ) {
                 i = spurEnd
             } else {
@@ -130,6 +200,19 @@ class SnapToRoadUseCase @Inject constructor(
             result.add(route.last())
         }
         return result
+    }
+
+    /** cur 꼭짓점에서의 진행 방향 변화 코사인 (경도는 cosLat 보정) — -1에 가까울수록 급반전 */
+    private fun turnCosine(prev: LatLng, cur: LatLng, next: LatLng): Double {
+        val cosLat = cos(Math.toRadians(cur.latitude))
+        val ax = (cur.longitude - prev.longitude) * cosLat
+        val ay = cur.latitude - prev.latitude
+        val bx = (next.longitude - cur.longitude) * cosLat
+        val by = next.latitude - cur.latitude
+        val la = sqrt(ax * ax + ay * ay)
+        val lb = sqrt(bx * bx + by * by)
+        if (la == 0.0 || lb == 0.0) return 1.0
+        return (ax * bx + ay * by) / (la * lb)
     }
 
     private fun sampleByArcLength(points: List<LatLng>, maxCount: Int): List<LatLng> {
