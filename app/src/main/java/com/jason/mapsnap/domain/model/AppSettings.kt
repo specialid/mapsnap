@@ -7,6 +7,6 @@ data class AppSettings(
     val epsilonRouteDeg: Double = 0.000072,
     val includeTimestamps: Boolean = false,
     val runningPaceSecPerKm: Int = 360,
-    // Phase 1 PoC 토글: T-Map/ORS 라우팅 엔진 비교용 (docs/osm_migration_plan.md)
-    val useOrsEngine: Boolean = false
+    // ORS(OSM)를 메인 라우팅 엔진으로 사용, T-Map은 비노출 폴백으로 유지 (docs/osm_migration_plan.md)
+    val useOrsEngine: Boolean = true
 )
