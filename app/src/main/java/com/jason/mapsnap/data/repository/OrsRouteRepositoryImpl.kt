@@ -7,6 +7,7 @@ import com.jason.mapsnap.domain.repository.RouteRepository
 import com.jason.mapsnap.domain.util.GeoUtils
 import com.naver.maps.geometry.LatLng
 import kotlinx.coroutines.CancellationException
+import retrofit2.HttpException
 import javax.inject.Inject
 
 class OrsRouteRepositoryImpl @Inject constructor(
@@ -66,6 +67,11 @@ class OrsRouteRepositoryImpl @Inject constructor(
         }
 
         RouteRepository.PedestrianRoute(points = points, apiCallCount = 1)
+    }.recoverCatching { e ->
+        if (e is HttpException && e.code() == 429) {
+            error("경로 탐색 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.")
+        }
+        throw e
     }.also { result ->
         val e = result.exceptionOrNull()
         if (e is CancellationException) throw e
