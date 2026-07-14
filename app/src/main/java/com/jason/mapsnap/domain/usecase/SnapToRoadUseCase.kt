@@ -10,6 +10,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import javax.inject.Inject
 import com.jason.mapsnap.domain.util.GeoUtils.haversineMeters
+import timber.log.Timber
 
 class SnapToRoadUseCase @Inject constructor(
     private val simplifyPath: SimplifyPathUseCase,
@@ -153,8 +154,9 @@ class SnapToRoadUseCase @Inject constructor(
             return false
         }
 
-        fun shouldKeepSpur(interior: List<LatLng>, anchor: LatLng): Boolean {
-            if (interior.isEmpty()) return false
+        // keep=true(보존)/false(제거) 여부와 함께 진단 로그용 사유를 반환
+        fun shouldKeepSpur(interior: List<LatLng>, anchor: LatLng): Pair<Boolean, String> {
+            if (interior.isEmpty()) return false to "빈 구간"
             var tipIdx = 0
             var tipDist = -1.0
             interior.forEachIndexed { idx, pt ->
@@ -164,11 +166,19 @@ class SnapToRoadUseCase @Inject constructor(
                     tipIdx = idx
                 }
             }
-            if (!isPureOutAndBack(interior, tipIdx)) return true
+            if (!isPureOutAndBack(interior, tipIdx)) return true to "면적 있는 고리(corridor 폭 초과) — 왕복 아님"
             return if (drawnPath != null) {
-                drawnPathReversesNear(interior[tipIdx])
+                if (drawnPathReversesNear(interior[tipIdx])) {
+                    true to "그린 선 반전 꼭짓점 근접 — 의도된 왕복 획"
+                } else {
+                    false to "그린 선에 반전 꼭짓점 없음 — 아티팩트로 판정"
+                }
             } else {
-                interior.any { isNearWaypoint(it) }
+                if (interior.any { isNearWaypoint(it) }) {
+                    true to "웨이포인트 근접 — 보존(마커 재라우팅 경로)"
+                } else {
+                    false to "웨이포인트 근접 없음 — 아티팩트로 판정"
+                }
             }
         }
 
@@ -180,21 +190,29 @@ class SnapToRoadUseCase @Inject constructor(
             var j = i + 1
             while (j < route.size && traveled <= maxSpurMeters) {
                 traveled += haversineMeters(route[j - 1], route[j])
-                // 최소 2개의 중간점(꼭짓점)이 있어야 실제 왕복 스퍼로 간주 — 단순 인접점 오탐 방지
-                if (j >= i + 3 && haversineMeters(route[i], route[j]) <= closeThresholdMeters) {
+                // T-Map 스퍼의 최빈 형태는 [진입점, 팁, 복귀점] 3점 구조(중간점 1개)이므로
+                // j >= i + 2 부터 복귀 판정 — 최종 게이트는 corridor 검사·그린 선 반전 판별이라
+                // 여기서 폭넓게 후보를 잡아도 아티팩트만 정확히 걸러진다.
+                if (j >= i + 2 && haversineMeters(route[i], route[j]) <= closeThresholdMeters) {
                     spurEnd = j
                     break
                 }
                 j++
             }
-            if (spurEnd in (i + 1) until route.size &&
-                !shouldKeepSpur(route.subList(i + 1, spurEnd), route[i])
-            ) {
-                i = spurEnd
-            } else {
-                result.add(route[i + 1])
-                i++
+            if (spurEnd in (i + 1) until route.size) {
+                val interior = route.subList(i + 1, spurEnd)
+                val (keep, reason) = shouldKeepSpur(interior, route[i])
+                Timber.d(
+                    "removeSpurs 후보: anchor=%d 왕복거리=%.1fm 중간점=%d keep=%s 사유=%s",
+                    i, traveled, interior.size, keep, reason
+                )
+                if (!keep) {
+                    i = spurEnd
+                    continue
+                }
             }
+            result.add(route[i + 1])
+            i++
         }
         if (result.last() != route.last()) {
             result.add(route.last())
