@@ -719,6 +719,7 @@ fun MapScreen(
             var tempIncludeTimestamps by remember { mutableStateOf(state.includeTimestamps) }
             var tempPaceMinutes by remember { mutableStateOf((state.runningPaceSecPerKm / 60).toString()) }
             var tempPaceSeconds by remember { mutableStateOf((state.runningPaceSecPerKm % 60).toString()) }
+            var tempUseOrsEngine by remember { mutableStateOf(state.useOrsEngine) }
 
             AlertDialog(
                 onDismissRequest = { showSettingsDialog = false },
@@ -812,6 +813,20 @@ fun MapScreen(
                                 Text("범위: 4:00~8:00 (km당)", fontSize = 11.sp, color = Color.Gray)
                             }
                         }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("라우팅 엔진: ORS(OSM) 사용", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Text("PoC 비교용 — 꺼두면 T-Map 사용", fontSize = 12.sp, color = Color.Gray)
+                            }
+                            Switch(
+                                checked = tempUseOrsEngine,
+                                onCheckedChange = { tempUseOrsEngine = it }
+                            )
+                        }
                         TextButton(
                             onClick = {
                                 tempInterval = 80.0
@@ -820,6 +835,7 @@ fun MapScreen(
                                 tempIncludeTimestamps = false
                                 tempPaceMinutes = "6"
                                 tempPaceSeconds = "0"
+                                tempUseOrsEngine = false
                             },
                             modifier = Modifier.align(Alignment.End)
                         ) {
@@ -837,7 +853,8 @@ fun MapScreen(
                             DRAWN_LEVELS[tempDrawnLevel],
                             ROUTE_LEVELS[tempRouteLevel],
                             tempIncludeTimestamps,
-                            totalSec
+                            totalSec,
+                            tempUseOrsEngine
                         )
                         showSettingsDialog = false
                     }) {

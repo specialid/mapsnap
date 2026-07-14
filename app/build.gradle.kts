@@ -30,9 +30,11 @@ android {
         val clientId = localProperties.getProperty("NAVER_CLIENT_ID", "")
         val clientSecret = localProperties.getProperty("NAVER_CLIENT_SECRET", "")
         val tmapApiKey = localProperties.getProperty("TMAP_API_KEY", "")
+        val orsApiKey = localProperties.getProperty("ORS_API_KEY", "")
         buildConfigField("String", "NAVER_CLIENT_ID", "\"$clientId\"")
         buildConfigField("String", "NAVER_CLIENT_SECRET", "\"$clientSecret\"")
         buildConfigField("String", "TMAP_API_KEY", "\"$tmapApiKey\"")
+        buildConfigField("String", "ORS_API_KEY", "\"$orsApiKey\"")
         manifestPlaceholders["NAVER_MAP_CLIENT_ID"] = clientId
     }
 

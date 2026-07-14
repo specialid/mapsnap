@@ -1,5 +1,6 @@
 package com.jason.mapsnap.di
 
+import com.jason.mapsnap.data.remote.OrsService
 import com.jason.mapsnap.data.remote.TmapService
 import dagger.Module
 import dagger.Provides
@@ -43,4 +44,18 @@ object NetworkModule {
     @Singleton
     fun provideTmapService(retrofit: Retrofit): TmapService =
         retrofit.create(TmapService::class.java)
+
+    @Provides
+    @Singleton
+    @OrsEngine
+    fun provideOrsRetrofit(okHttpClient: OkHttpClient): Retrofit = Retrofit.Builder()
+        .baseUrl("https://api.openrouteservice.org/")
+        .client(okHttpClient)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
+    @Provides
+    @Singleton
+    fun provideOrsService(@OrsEngine retrofit: Retrofit): OrsService =
+        retrofit.create(OrsService::class.java)
 }

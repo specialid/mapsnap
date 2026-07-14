@@ -53,6 +53,8 @@ data class MapState(
     val epsilonRouteDeg: Double = 0.000072,
     val includeTimestamps: Boolean = false,
     val runningPaceSecPerKm: Int = 360,
+    // Phase 1 PoC 토글: T-Map/ORS 라우팅 엔진 비교용 (docs/osm_migration_plan.md)
+    val useOrsEngine: Boolean = false,
     val savedRoutes: List<SavedRoute> = emptyList(),
     val showSaveRouteDialog: Boolean = false,
     val showLoadRouteDialog: Boolean = false

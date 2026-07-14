@@ -101,7 +101,8 @@ class MapViewModel @Inject constructor(
                         epsilonDrawnDeg = settings.epsilonDrawnDeg,
                         epsilonRouteDeg = settings.epsilonRouteDeg,
                         includeTimestamps = settings.includeTimestamps,
-                        runningPaceSecPerKm = settings.runningPaceSecPerKm
+                        runningPaceSecPerKm = settings.runningPaceSecPerKm,
+                        useOrsEngine = settings.useOrsEngine
                     )
                 }
             }
@@ -127,7 +128,8 @@ class MapViewModel @Inject constructor(
         epsilonDrawn: Double,
         epsilonRoute: Double,
         includeTimestamps: Boolean,
-        runningPaceSecPerKm: Int
+        runningPaceSecPerKm: Int,
+        useOrsEngine: Boolean
     ) = intent {
         reduce {
             state.copy(
@@ -135,7 +137,8 @@ class MapViewModel @Inject constructor(
                 epsilonDrawnDeg = epsilonDrawn,
                 epsilonRouteDeg = epsilonRoute,
                 includeTimestamps = includeTimestamps,
-                runningPaceSecPerKm = runningPaceSecPerKm
+                runningPaceSecPerKm = runningPaceSecPerKm,
+                useOrsEngine = useOrsEngine
             )
         }
         withContext(Dispatchers.IO) {
@@ -145,7 +148,8 @@ class MapViewModel @Inject constructor(
                     epsilonDrawnDeg = epsilonDrawn,
                     epsilonRouteDeg = epsilonRoute,
                     includeTimestamps = includeTimestamps,
-                    runningPaceSecPerKm = runningPaceSecPerKm
+                    runningPaceSecPerKm = runningPaceSecPerKm,
+                    useOrsEngine = useOrsEngine
                 )
             )
         }
