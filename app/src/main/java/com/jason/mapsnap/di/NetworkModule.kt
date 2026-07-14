@@ -49,7 +49,8 @@ object NetworkModule {
     @Singleton
     @OrsEngine
     fun provideOrsRetrofit(okHttpClient: OkHttpClient): Retrofit = Retrofit.Builder()
-        .baseUrl("https://api.openrouteservice.org/")
+        // api.openrouteservice.org는 2026-04-28 deprecated, 2026-08-24 차단 예정 (HeiGIT 공지)
+        .baseUrl("https://api.heigit.org/openrouteservice/")
         .client(okHttpClient)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
