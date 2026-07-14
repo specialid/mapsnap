@@ -275,12 +275,12 @@ fun BottomControls(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Button(
+                            OutlinedButton(
                                 onClick = onContinue,
                                 modifier = Modifier.weight(1f).height(48.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                border = BorderStroke(1.dp, Color(0x55FFFFFF)),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color.White
                                 )
                             ) {
                                 Icon(

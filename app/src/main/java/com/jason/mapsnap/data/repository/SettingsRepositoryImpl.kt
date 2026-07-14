@@ -22,7 +22,8 @@ class SettingsRepositoryImpl @Inject constructor(
             epsilonRouteDeg = prefs.getFloat("epsilonRouteDeg", defaults.epsilonRouteDeg.toFloat()).toDouble(),
             includeTimestamps = prefs.getBoolean("includeTimestamps", defaults.includeTimestamps),
             runningPaceSecPerKm = prefs.getInt("runningPaceSecPerKm", defaults.runningPaceSecPerKm),
-            useOrsEngine = prefs.getBoolean("useOrsEngine", defaults.useOrsEngine)
+            useOrsEngine = prefs.getBoolean("useOrsEngine", defaults.useOrsEngine),
+            orsApiKey = prefs.getString("orsApiKey", defaults.orsApiKey) ?: defaults.orsApiKey
         )
     }
 
@@ -34,6 +35,7 @@ class SettingsRepositoryImpl @Inject constructor(
             .putBoolean("includeTimestamps", settings.includeTimestamps)
             .putInt("runningPaceSecPerKm", settings.runningPaceSecPerKm)
             .putBoolean("useOrsEngine", settings.useOrsEngine)
+            .putString("orsApiKey", settings.orsApiKey)
             .apply()
     }
 }

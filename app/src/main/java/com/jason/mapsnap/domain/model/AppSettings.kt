@@ -8,5 +8,7 @@ data class AppSettings(
     val includeTimestamps: Boolean = false,
     val runningPaceSecPerKm: Int = 360,
     // ORS(OSM)를 메인 라우팅 엔진으로 사용, T-Map은 비노출 폴백으로 유지 (docs/osm_migration_plan.md)
-    val useOrsEngine: Boolean = true
+    val useOrsEngine: Boolean = true,
+    // 사용자 본인 명의 ORS API 키 — 비어 있으면 앱 기본 키(BuildConfig) 사용
+    val orsApiKey: String = ""
 )

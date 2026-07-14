@@ -102,7 +102,8 @@ class MapViewModel @Inject constructor(
                         epsilonRouteDeg = settings.epsilonRouteDeg,
                         includeTimestamps = settings.includeTimestamps,
                         runningPaceSecPerKm = settings.runningPaceSecPerKm,
-                        useOrsEngine = settings.useOrsEngine
+                        useOrsEngine = settings.useOrsEngine,
+                        orsApiKey = settings.orsApiKey
                     )
                 }
             }
@@ -129,7 +130,8 @@ class MapViewModel @Inject constructor(
         epsilonRoute: Double,
         includeTimestamps: Boolean,
         runningPaceSecPerKm: Int,
-        useOrsEngine: Boolean
+        useOrsEngine: Boolean,
+        orsApiKey: String
     ) = intent {
         reduce {
             state.copy(
@@ -138,7 +140,8 @@ class MapViewModel @Inject constructor(
                 epsilonRouteDeg = epsilonRoute,
                 includeTimestamps = includeTimestamps,
                 runningPaceSecPerKm = runningPaceSecPerKm,
-                useOrsEngine = useOrsEngine
+                useOrsEngine = useOrsEngine,
+                orsApiKey = orsApiKey
             )
         }
         withContext(Dispatchers.IO) {
@@ -149,7 +152,8 @@ class MapViewModel @Inject constructor(
                     epsilonRouteDeg = epsilonRoute,
                     includeTimestamps = includeTimestamps,
                     runningPaceSecPerKm = runningPaceSecPerKm,
-                    useOrsEngine = useOrsEngine
+                    useOrsEngine = useOrsEngine,
+                    orsApiKey = orsApiKey
                 )
             )
         }
@@ -324,6 +328,11 @@ class MapViewModel @Inject constructor(
             )
         }
         snapCurrentPath()
+    }
+
+    /** 그리기 중 멀티터치 감지 시 진행 중이던 스트로크를 취소(패닝으로 전환) — pendingStrokes는 영향 없음 */
+    fun onDrawCancel() = intent {
+        activeStroke.clear()
     }
 
     fun onClearDrawing() = intent {

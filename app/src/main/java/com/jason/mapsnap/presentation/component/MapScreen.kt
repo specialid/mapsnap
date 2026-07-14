@@ -77,6 +77,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -259,6 +260,8 @@ fun MapScreen(
     var showInfoDialog by remember { mutableStateOf(false) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
     var showRedrawConfirmDialog by remember { mutableStateOf(false) }
+    var showOrsGuideDialog by remember { mutableStateOf(false) }
+    var mapContainerWidthPx by remember { mutableStateOf(0) }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -458,7 +461,7 @@ fun MapScreen(
             }
         }
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize().onSizeChanged { mapContainerWidthPx = it.width }) {
         NaverMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
@@ -583,6 +586,7 @@ fun MapScreen(
             onDrawStart = viewModel::onDrawStart,
             onDrawPoint = viewModel::onDrawPoint,
             onDrawEnd = viewModel::onDrawEnd,
+            onDrawCancel = viewModel::onDrawCancel,
             modifier = Modifier.fillMaxSize()
         )
 
@@ -654,12 +658,20 @@ fun MapScreen(
                 if (selectedIndex >= 0) {
                     val bubbleSizeDp = 48.dp
                     val bubbleSizePx = 48f * density
+                    // 마커가 화면 우측 가장자리에 가까우면 버블이 잘리므로 왼쪽으로 뒤집는다
+                    val rightOffsetPx = screenPoint.x + 32f * density
+                    val fitsOnRight = mapContainerWidthPx == 0 ||
+                        rightOffsetPx + bubbleSizePx <= mapContainerWidthPx
+                    val bubbleX = if (fitsOnRight) {
+                        rightOffsetPx
+                    } else {
+                        screenPoint.x - 32f * density - bubbleSizePx
+                    }
                     Box(
                         modifier = Modifier
                             .offset {
                                 IntOffset(
-                                    // 마커 오른쪽 32dp 오프셋: 드래그 핸들과 공간 충돌 방지
-                                    (screenPoint.x + 32f * density).toInt(),
+                                    bubbleX.toInt(),
                                     (screenPoint.y - bubbleSizePx / 2).toInt()
                                 )
                             }
@@ -719,6 +731,7 @@ fun MapScreen(
             var tempIncludeTimestamps by remember { mutableStateOf(state.includeTimestamps) }
             var tempPaceMinutes by remember { mutableStateOf((state.runningPaceSecPerKm / 60).toString()) }
             var tempPaceSeconds by remember { mutableStateOf((state.runningPaceSecPerKm % 60).toString()) }
+            var tempOrsApiKey by remember { mutableStateOf(state.orsApiKey) }
 
             AlertDialog(
                 onDismissRequest = { showSettingsDialog = false },
@@ -812,6 +825,37 @@ fun MapScreen(
                                 Text("범위: 4:00~8:00 (km당)", fontSize = 11.sp, color = Color.Gray)
                             }
                         }
+                        HorizontalDivider(color = Color(0x1AFFFFFF))
+                        Text(
+                            "고급",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFB0BEC5)
+                        )
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("내 ORS API 키", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                TextButton(onClick = { showOrsGuideDialog = true }) {
+                                    Text("발급 방법", fontSize = 12.sp)
+                                }
+                            }
+                            Text(
+                                "비워두면 앱 기본 키를 함께 씁니다. 여러 명이 앱 기본 키를 같이 쓰면 한도가 금방 찰 수 있으니, 본인 키를 입력하는 걸 권장합니다.",
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+                            TextField(
+                                value = tempOrsApiKey,
+                                onValueChange = { tempOrsApiKey = it.trim() },
+                                placeholder = { Text("발급받은 키를 붙여넣으세요") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                         TextButton(
                             onClick = {
                                 tempInterval = 80.0
@@ -838,7 +882,8 @@ fun MapScreen(
                             ROUTE_LEVELS[tempRouteLevel],
                             tempIncludeTimestamps,
                             totalSec,
-                            true
+                            true,
+                            tempOrsApiKey
                         )
                         showSettingsDialog = false
                     }) {
@@ -848,6 +893,47 @@ fun MapScreen(
                 dismissButton = {
                     TextButton(onClick = { showSettingsDialog = false }) {
                         Text("취소")
+                    }
+                }
+            )
+        }
+
+        // ORS API 키 발급 방법 안내 다이얼로그
+        if (showOrsGuideDialog) {
+            AlertDialog(
+                onDismissRequest = { showOrsGuideDialog = false },
+                title = { Text("ORS API 키 발급 방법", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("1. openrouteservice.org 접속 후 우측 상단 Sign Up으로 무료 회원가입", fontSize = 14.sp)
+                        Text("2. 가입 후 Dashboard(대시보드) 페이지로 이동", fontSize = 14.sp)
+                        Text("3. \"Request a token\" 버튼 클릭 → 서비스로 \"Directions\" 선택 후 토큰 생성", fontSize = 14.sp)
+                        Text("4. 생성된 토큰(긴 문자열)을 복사", fontSize = 14.sp)
+                        Text("5. MapSnap 설정 화면의 \"내 ORS API 키\"란에 붙여넣고 적용", fontSize = 14.sp)
+                        Text(
+                            "무료 키는 분당 40회, 일 2,000회까지 무료로 사용할 수 있습니다.",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val intent = android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse("https://openrouteservice.org/dev/#/signup")
+                        )
+                        context.startActivity(intent)
+                    }) {
+                        Text("가입 페이지 열기")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showOrsGuideDialog = false }) {
+                        Text("닫기")
                     }
                 }
             )

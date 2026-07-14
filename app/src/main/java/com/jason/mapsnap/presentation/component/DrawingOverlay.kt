@@ -2,7 +2,8 @@ package com.jason.mapsnap.presentation.component
 
 import android.graphics.PointF
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
@@ -15,11 +16,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.jason.mapsnap.presentation.map.DrawingMode
 import com.naver.maps.geometry.LatLng
+import com.naver.maps.map.CameraUpdate
 import com.naver.maps.map.compose.CameraPositionState
 
 @Composable
@@ -33,6 +36,7 @@ fun DrawingOverlay(
     onDrawStart: (LatLng) -> Unit,
     onDrawPoint: (LatLng) -> Unit,
     onDrawEnd: () -> Unit,
+    onDrawCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val drawnLatLngs = remember { mutableStateListOf<LatLng>() }
@@ -46,26 +50,46 @@ fun DrawingOverlay(
     val isDrawing = drawingMode == DrawingMode.DRAWING
 
     // pointerInput은 그리기 모드일 때만 추가 — 아닐 때 모든 터치를 NaverMap에 통과시킴
+    // 손가락 1개: 그리기 / 손가락 2개 이상: 그리기 취소하고 지도 패닝으로 전환
     val touchModifier = if (isDrawing) {
         Modifier.pointerInput(Unit) {
-            detectDragGestures(
-                onDragStart = { offset ->
-                    drawnLatLngs.clear()
-                    screenToLatLng(offset, naverMap)?.let { latLng ->
-                        drawnLatLngs.add(latLng)
-                        onDrawStart(latLng)
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                down.consume()
+                drawnLatLngs.clear()
+                screenToLatLng(down.position, naverMap)?.let { latLng ->
+                    drawnLatLngs.add(latLng)
+                    onDrawStart(latLng)
+                }
+
+                var isPanning = false
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val pressed = event.changes.filter { it.pressed }
+                    if (pressed.isEmpty()) break
+
+                    if (pressed.size >= 2) {
+                        if (!isPanning) {
+                            isPanning = true
+                            onDrawCancel()
+                            drawnLatLngs.clear()
+                        }
+                        val dx = pressed.map { it.positionChange().x }.average().toFloat()
+                        val dy = pressed.map { it.positionChange().y }.average().toFloat()
+                        naverMap?.moveCamera(CameraUpdate.scrollBy(PointF(-dx, -dy)))
+                        pressed.forEach { it.consume() }
+                    } else if (!isPanning) {
+                        val change = pressed.first()
+                        screenToLatLng(change.position, naverMap)?.let { latLng ->
+                            drawnLatLngs.add(latLng)
+                            onDrawPoint(latLng)
+                        }
+                        change.consume()
                     }
-                },
-                onDrag = { change, _ ->
-                    val offset = change.position
-                    screenToLatLng(offset, naverMap)?.let { latLng ->
-                        drawnLatLngs.add(latLng)
-                        onDrawPoint(latLng)
-                    }
-                },
-                onDragEnd = { onDrawEnd() },
-                onDragCancel = { onDrawEnd() }
-            )
+                }
+
+                if (!isPanning) onDrawEnd()
+            }
         }
     } else {
         Modifier  // 터치 핸들러 없음 → 이벤트 통과
