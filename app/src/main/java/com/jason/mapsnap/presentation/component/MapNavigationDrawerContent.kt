@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jason.mapsnap.ui.theme.MapOverlayColors
 
 /** 좌측 네비게이션 드로어 메뉴 — 각 항목 클릭 시 드로어를 닫는 책임은 호출부(콜백)에 위임 */
 @Composable
@@ -32,8 +33,8 @@ fun MapNavigationDrawerContent(
     onOpenInfo: () -> Unit
 ) {
     ModalDrawerSheet(
-        drawerContainerColor = Color(0xFF1F1F23),
-        drawerContentColor = Color.White
+        drawerContainerColor = MaterialTheme.colorScheme.surface,
+        drawerContentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
@@ -41,11 +42,11 @@ fun MapNavigationDrawerContent(
             modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = MaterialTheme.colorScheme.onSurface
         )
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 28.dp),
-            color = Color(0x33FFFFFF)
+            color = MapOverlayColors.cardBorder
         )
         Spacer(modifier = Modifier.height(12.dp))
         NavigationDrawerItem(
@@ -55,8 +56,8 @@ fun MapNavigationDrawerContent(
             icon = { Icon(Icons.Default.MyLocation, contentDescription = null) },
             colors = NavigationDrawerItemDefaults.colors(
                 unselectedContainerColor = Color.Transparent,
-                unselectedTextColor = Color.White,
-                unselectedIconColor = Color.White
+                unselectedTextColor = MaterialTheme.colorScheme.onSurface,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurface
             ),
             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
         )
@@ -67,8 +68,8 @@ fun MapNavigationDrawerContent(
             icon = { Icon(Icons.Default.Folder, contentDescription = null) },
             colors = NavigationDrawerItemDefaults.colors(
                 unselectedContainerColor = Color.Transparent,
-                unselectedTextColor = Color.White,
-                unselectedIconColor = Color.White
+                unselectedTextColor = MaterialTheme.colorScheme.onSurface,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurface
             ),
             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
         )
@@ -79,8 +80,8 @@ fun MapNavigationDrawerContent(
             icon = { Icon(Icons.Default.Settings, contentDescription = null) },
             colors = NavigationDrawerItemDefaults.colors(
                 unselectedContainerColor = Color.Transparent,
-                unselectedTextColor = Color.White,
-                unselectedIconColor = Color.White
+                unselectedTextColor = MaterialTheme.colorScheme.onSurface,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurface
             ),
             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
         )
@@ -91,8 +92,8 @@ fun MapNavigationDrawerContent(
             icon = { Icon(Icons.AutoMirrored.Filled.Help, contentDescription = null) },
             colors = NavigationDrawerItemDefaults.colors(
                 unselectedContainerColor = Color.Transparent,
-                unselectedTextColor = Color.White,
-                unselectedIconColor = Color.White
+                unselectedTextColor = MaterialTheme.colorScheme.onSurface,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurface
             ),
             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
         )
@@ -103,8 +104,8 @@ fun MapNavigationDrawerContent(
             icon = { Icon(Icons.Default.Info, contentDescription = null) },
             colors = NavigationDrawerItemDefaults.colors(
                 unselectedContainerColor = Color.Transparent,
-                unselectedTextColor = Color.White,
-                unselectedIconColor = Color.White
+                unselectedTextColor = MaterialTheme.colorScheme.onSurface,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurface
             ),
             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
         )

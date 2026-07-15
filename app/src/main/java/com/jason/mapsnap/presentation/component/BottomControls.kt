@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jason.mapsnap.presentation.map.DrawingMode
+import com.jason.mapsnap.ui.theme.MapOverlayColors
 
 @Composable
 fun BottomControls(
@@ -61,14 +62,14 @@ fun BottomControls(
 ) {
     // 지도 이동 모드 시 카드 테두리를 주황색으로 강조해 현재 상태를 화면 수준에서 알림
     val cardBorder = if (isMapMoveMode && drawingMode == DrawingMode.DRAWING) {
-        BorderStroke(2.dp, Color(0xFFE65100))
+        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
     } else {
-        BorderStroke(1.dp, Color(0x33FFFFFF))
+        BorderStroke(1.dp, MapOverlayColors.cardBorder)
     }
 
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xCC1F1F23)
+            containerColor = MapOverlayColors.cardBackground
         ),
         shape = RoundedCornerShape(20.dp),
         border = cardBorder,
@@ -88,7 +89,7 @@ fun BottomControls(
                     // IDLE: 안내 텍스트 위 + 그리기 시작 버튼 전폭 48dp
                     Text(
                         text = "손가락으로 지도 위에 경로를 그려보세요",
-                        color = Color(0xFFB0BEC5),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -121,7 +122,7 @@ fun BottomControls(
                     ) {
                         Text(
                             text = if (isMapMoveMode) "지도를 조작할 수 있습니다" else "지도 위에 선을 그려주세요",
-                            color = if (isMapMoveMode) Color(0xFFFFB300) else Color.White,
+                            color = if (isMapMoveMode) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.weight(1f)
@@ -130,11 +131,11 @@ fun BottomControls(
                             onClick = onToggleMapMoveMode,
                             border = BorderStroke(
                                 1.dp,
-                                if (isMapMoveMode) Color(0xFFE65100) else Color(0x55FFFFFF)
+                                if (isMapMoveMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                             ),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = if (isMapMoveMode) Color(0x1AE65100) else Color.Transparent,
-                                contentColor = if (isMapMoveMode) Color(0xFFE65100) else Color.White
+                                containerColor = if (isMapMoveMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else Color.Transparent,
+                                contentColor = if (isMapMoveMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             ),
                             modifier = Modifier.height(36.dp),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)
@@ -154,9 +155,9 @@ fun BottomControls(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(48.dp),
-                            border = BorderStroke(1.dp, Color(0x55FFFFFF)),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Color.White
+                                contentColor = MaterialTheme.colorScheme.onSurface
                             )
                         ) {
                             Text("취소", fontSize = 14.sp)
@@ -196,15 +197,15 @@ fun BottomControls(
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 text = "도로 스냅 경로 계산 중...",
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium
                             )
                         }
                         OutlinedButton(
                             onClick = onCancelProcessing,
-                            border = BorderStroke(1.dp, Color(0x55FFFFFF)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
                             modifier = Modifier.height(36.dp),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                         ) {
@@ -233,25 +234,25 @@ fun BottomControls(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = "거리", color = Color(0xFFB0BEC5), fontSize = 12.sp)
+                            Text(text = "거리", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text(text = distanceStr, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(text = distanceStr, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
-                        Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color(0x33FFFFFF)))
+                        Box(modifier = Modifier.width(1.dp).height(24.dp).background(MapOverlayColors.cardBorder))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = "예상 시간", color = Color(0xFFB0BEC5), fontSize = 12.sp)
+                            Text(text = "예상 시간", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text(text = timeStr, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(text = timeStr, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
-                        Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color(0x33FFFFFF)))
+                        Box(modifier = Modifier.width(1.dp).height(24.dp).background(MapOverlayColors.cardBorder))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = "마커 수", color = Color(0xFFB0BEC5), fontSize = 12.sp)
+                            Text(text = "마커 수", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text(text = "${routeMarkersCount}개", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "${routeMarkersCount}개", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
-                    HorizontalDivider(color = Color(0x1AFFFFFF))
+                    HorizontalDivider(color = MapOverlayColors.dividerFaint)
 
                     // Row 2: 주 액션 버튼
                     if (hasPendingEdits) {
@@ -279,9 +280,9 @@ fun BottomControls(
                             OutlinedButton(
                                 onClick = onContinue,
                                 modifier = Modifier.weight(1f).height(48.dp),
-                                border = BorderStroke(1.dp, Color(0x55FFFFFF)),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                                 colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = Color.White
+                                    contentColor = MaterialTheme.colorScheme.onSurface
                                 )
                             ) {
                                 Icon(
@@ -323,7 +324,7 @@ fun BottomControls(
                                 TextButton(
                                     onClick = onUndo,
                                     modifier = Modifier.heightIn(min = 48.dp),
-                                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Undo,
@@ -339,7 +340,7 @@ fun BottomControls(
                         TextButton(
                             onClick = onDrawToggle,
                             modifier = Modifier.heightIn(min = 48.dp),
-                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)
                         ) {
                             Text("다시 그리기", fontSize = 13.sp)
                         }

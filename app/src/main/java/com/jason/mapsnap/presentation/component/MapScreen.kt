@@ -52,6 +52,7 @@ import com.google.android.gms.location.LocationServices
 import com.jason.mapsnap.presentation.map.DrawingMode
 import com.jason.mapsnap.presentation.map.MapSideEffect
 import com.jason.mapsnap.presentation.map.MapViewModel
+import com.jason.mapsnap.ui.theme.MapOverlayColors
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.map.CameraPosition
 import com.naver.maps.map.CameraUpdate
@@ -273,9 +274,9 @@ fun MapScreen(
                 .padding(16.dp),
             shape = CircleShape,
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xCC1F1F23)
+                containerColor = MapOverlayColors.cardBackground
             ),
-            border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+            border = BorderStroke(1.dp, MapOverlayColors.cardBorder),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
             IconButton(
@@ -287,7 +288,7 @@ fun MapScreen(
                 Icon(
                     imageVector = Icons.Default.Menu,
                     contentDescription = "메뉴",
-                    tint = Color.White
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -379,7 +380,7 @@ fun MapScreen(
                 title = "구간 삭제",
                 message = "선택한 구간을 삭제하고 경로를 재탐색할까요?",
                 confirmLabel = "삭제",
-                confirmColor = Color(0xFFE65100),
+                confirmColor = MaterialTheme.colorScheme.primary,
                 onConfirm = { viewModel.onDeleteSegmentConfirmed() },
                 onDismiss = { viewModel.onDeleteSegmentDismissed() }
             )
@@ -391,7 +392,7 @@ fun MapScreen(
                 title = "마커 삭제",
                 message = "선택한 중간 마커를 삭제하고 경로를 재탐색할까요?",
                 confirmLabel = "삭제",
-                confirmColor = Color(0xFFE53935),
+                confirmColor = MaterialTheme.colorScheme.error,
                 onConfirm = { viewModel.onDeleteMarkerConfirmed() },
                 onDismiss = { viewModel.onDeleteMarkerDismissed() }
             )
@@ -433,7 +434,7 @@ fun MapScreen(
                 title = "일일 API 호출 한도 초과",
                 message = "오늘 제공된 무료 API 호출 한도를 초과했습니다. 광고를 시청하고 10회 추가 이용하시겠습니까?",
                 confirmLabel = "광고 시청",
-                confirmColor = Color(0xFFE65100),
+                confirmColor = MaterialTheme.colorScheme.primary,
                 confirmBold = true,
                 onConfirm = { viewModel.onWatchAdRequested() },
                 onDismiss = { viewModel.onDismissAdPrompt() }

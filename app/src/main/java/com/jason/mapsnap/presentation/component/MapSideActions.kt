@@ -34,6 +34,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jason.mapsnap.BuildConfig
 import com.jason.mapsnap.presentation.map.DrawingMode
+import com.jason.mapsnap.ui.theme.MapOverlayColors
+
+// API 잔여 횟수 임박 경고색 — 브랜드 primary(주황)와 구분되는 별도 경고 색상이라 테마 토큰화하지 않음
+private val QuotaWarningColor = Color(0xFFFF9800)
+private val DebugOkColor = Color(0xFF4CAF50)
 
 /** 화면 우측 상단: 남은 API 호출 횟수 카드 + 지도 타입 토글/경로 저장 FAB */
 @Composable
@@ -62,16 +67,16 @@ fun MapSideActions(
             run {
                 val remaining = (tmapMaxLimitCount - tmapApiCallCount).coerceAtLeast(0)
                 val quotaColor = when {
-                    remaining <= 0 -> Color(0xFFE53935) // 소진: 빨강
-                    remaining <= 5 -> Color(0xFFFF9800) // 임박: 주황
-                    else -> Color.White
+                    remaining <= 0 -> MaterialTheme.colorScheme.error // 소진: 빨강
+                    remaining <= 5 -> QuotaWarningColor // 임박: 주황
+                    else -> MaterialTheme.colorScheme.onSurface
                 }
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xCC1F1F23)
+                        containerColor = MapOverlayColors.cardBackground
                     ),
-                    border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                    border = BorderStroke(1.dp, MapOverlayColors.cardBorder),
                     elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                 ) {
                     Column(
@@ -80,7 +85,7 @@ fun MapSideActions(
                     ) {
                         Text(
                             text = "남은 경로 분석",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(bottom = 6.dp)
@@ -97,7 +102,7 @@ fun MapSideActions(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "오늘 남은 횟수: ",
-                                color = Color(0xFFB0BEC5),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 11.sp
                             )
                             Text(
@@ -115,17 +120,17 @@ fun MapSideActions(
                                 Box(
                                     modifier = Modifier
                                         .size(6.dp)
-                                        .background(Color(0xFF4CAF50), shape = CircleShape)
+                                        .background(DebugOkColor, shape = CircleShape)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Naver Map API: ",
-                                    color = Color(0xFFB0BEC5),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 11.sp
                                 )
                                 Text(
                                     text = "${naverMapApiCallCount} 회",
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp
                                 )

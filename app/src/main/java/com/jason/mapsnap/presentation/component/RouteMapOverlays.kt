@@ -1,5 +1,6 @@
 package com.jason.mapsnap.presentation.component
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -8,6 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.jason.mapsnap.presentation.map.MapState
+import com.jason.mapsnap.ui.theme.MapOverlayColors
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.map.compose.ExperimentalNaverMapApi
 import com.naver.maps.map.compose.Marker as NaverMarker
@@ -16,6 +18,11 @@ import com.naver.maps.map.compose.rememberUpdatedMarkerState
 import com.naver.maps.map.overlay.OverlayImage
 
 enum class MarkerType { START, END, INTERMEDIATE }
+
+// 미편집 상태 기본 경로색(파랑) — 브랜드 팔레트와 무관한 지도 경로 전용 색이라 테마 토큰화하지 않음
+private val PathColorDefault = Color(0xFF2196F3)
+private val PathOutlineColorDefault = Color(0xFF0D47A1)
+private val PathOutlineColorPending = Color(0xFFFF6F00)
 
 // 동일 (타입, 라벨, 선택 여부) 조합은 항상 같은 비트맵이므로 캐시 — 드래그 중 매 프레임 재생성 방지
 private val markerIconCache = mutableMapOf<Triple<MarkerType, String?, Boolean>, OverlayImage>()
@@ -146,14 +153,14 @@ fun RouteMapOverlays(
                     PathOverlay(
                         coords = seg,
                         color = when {
-                            isSelected -> Color(0xFFE65100)
-                            state.hasPendingEdits -> Color(0xFFFFB300) // 적용 대기(앰버)
-                            else -> Color(0xFF2196F3)
+                            isSelected -> MaterialTheme.colorScheme.primary
+                            state.hasPendingEdits -> MaterialTheme.colorScheme.secondary // 적용 대기(앰버)
+                            else -> PathColorDefault
                         },
                         outlineColor = when {
-                            isSelected -> Color(0xFFBF360C)
-                            state.hasPendingEdits -> Color(0xFFFF6F00)
-                            else -> Color(0xFF0D47A1)
+                            isSelected -> MapOverlayColors.primaryOutline
+                            state.hasPendingEdits -> PathOutlineColorPending
+                            else -> PathOutlineColorDefault
                         },
                         width = if (isSelected) 7.dp else 5.dp,
                         outlineWidth = 2.dp,

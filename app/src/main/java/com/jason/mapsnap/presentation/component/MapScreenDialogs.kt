@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.jason.mapsnap.domain.model.SavedRoute
+import com.jason.mapsnap.ui.theme.MapOverlayColors
 import kotlinx.coroutines.delay
 
 // 마커/드로잉 정밀도 5단계 라벨 및 degree 매핑 — 설정 다이얼로그 전용
@@ -136,7 +137,7 @@ fun SettingsDialog(
                 ) {
                     Column {
                         Text("타임스탬프 포함", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        Text("일부 앱이 시각 정보를 요구할 때만 켜세요", fontSize = 12.sp, color = Color.Gray)
+                        Text("일부 앱이 시각 정보를 요구할 때만 켜세요", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = tempIncludeTimestamps,
@@ -179,15 +180,15 @@ fun SettingsDialog(
                                 singleLine = true
                             )
                         }
-                        Text("범위: 4:00~8:00 (km당)", fontSize = 11.sp, color = Color.Gray)
+                        Text("범위: 4:00~8:00 (km당)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                HorizontalDivider(color = Color(0x1AFFFFFF))
+                HorizontalDivider(color = MapOverlayColors.dividerFaint)
                 Text(
                     "고급",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFB0BEC5)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Column {
                     Row(
@@ -203,7 +204,7 @@ fun SettingsDialog(
                     Text(
                         "비워두면 앱 기본 키를 함께 씁니다. 여러 명이 앱 기본 키를 같이 쓰면 한도가 금방 찰 수 있으니, 본인 키를 입력하는 걸 권장합니다.",
                         fontSize = 12.sp,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     TextField(
                         value = tempOrsApiKey,
@@ -275,7 +276,7 @@ fun OrsGuideDialog(
                 Text(
                     "무료 키는 분당 40회, 일 2,000회까지 무료로 사용할 수 있습니다.",
                     fontSize = 12.sp,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
@@ -331,7 +332,7 @@ fun InfoDialog(versionCode: Int, onDismiss: () -> Unit) {
                 Text("버전 $versionCode", fontSize = 14.sp)
                 Text("보행자 중심 도로 스냅 및 편집 애플리케이션", fontSize = 14.sp)
                 Spacer(modifier = Modifier.size(8.dp))
-                Text("Powered by openrouteservice(OSM) & Naver Map SDK", fontSize = 12.sp, color = Color.Gray)
+                Text("Powered by openrouteservice(OSM) & Naver Map SDK", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         confirmButton = {
@@ -421,8 +422,8 @@ fun MockAdPlayerDialog(onComplete: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(280.dp, 180.dp)
-                .background(Color(0xE61F1F23), shape = RoundedCornerShape(16.dp))
-                .border(1.dp, Color(0x33FFFFFF), shape = RoundedCornerShape(16.dp))
+                .background(MapOverlayColors.scrimStrong, shape = RoundedCornerShape(16.dp))
+                .border(1.dp, MapOverlayColors.cardBorder, shape = RoundedCornerShape(16.dp))
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -431,13 +432,13 @@ fun MockAdPlayerDialog(onComplete: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 CircularProgressIndicator(
-                    color = Color(0xFFE65100),
+                    color = MaterialTheme.colorScheme.primary,
                     strokeWidth = 4.dp,
                     modifier = Modifier.size(48.dp)
                 )
                 Text(
                     text = "광고를 시청하는 중입니다...",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -458,7 +459,7 @@ fun LoadRouteDialog(
         title = { Text("저장된 경로", fontWeight = FontWeight.Bold) },
         text = {
             if (savedRoutes.isEmpty()) {
-                Text("저장된 경로가 없습니다", color = Color.Gray)
+                Text("저장된 경로가 없습니다", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 Column(
                     modifier = Modifier
@@ -486,7 +487,7 @@ fun LoadRouteDialog(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(route.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                Text("$dateStr · $distanceStr", fontSize = 12.sp, color = Color.Gray)
+                                Text("$dateStr · $distanceStr", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             IconButton(onClick = { onDelete(route.id) }) {
                                 Icon(
@@ -496,7 +497,7 @@ fun LoadRouteDialog(
                                 )
                             }
                         }
-                        HorizontalDivider(color = Color(0x1AFFFFFF))
+                        HorizontalDivider(color = MapOverlayColors.dividerFaint)
                     }
                 }
             }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -22,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.jason.mapsnap.presentation.map.MapState
+import com.jason.mapsnap.ui.theme.MapOverlayColors
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.map.compose.CameraPositionState
 
@@ -100,8 +102,8 @@ fun MarkerDragHandleOverlay(
                 Box(
                     modifier = Modifier
                         .size(32.dp)
-                        .background(Color(0xFFE65100), shape = CircleShape)
-                        .border(3.dp, Color(0xFFBF360C), shape = CircleShape)
+                        .background(MaterialTheme.colorScheme.primary, shape = CircleShape)
+                        .border(3.dp, MapOverlayColors.primaryOutline, shape = CircleShape)
                 )
             }
 
@@ -126,8 +128,8 @@ fun MarkerDragHandleOverlay(
                             )
                         }
                         .size(bubbleSizeDp)
-                        .background(Color(0xFFE53935), shape = CircleShape)
-                        .border(2.dp, Color.White, shape = CircleShape)
+                        .background(MaterialTheme.colorScheme.error, shape = CircleShape)
+                        .border(2.dp, MaterialTheme.colorScheme.onError, shape = CircleShape)
                         .pointerInput(selectedIndex) {
                             detectTapGestures {
                                 onDeleteMarkerTapped()
@@ -138,7 +140,7 @@ fun MarkerDragHandleOverlay(
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "마커 삭제",
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onError,
                         modifier = Modifier.size(24.dp)
                     )
                 }
