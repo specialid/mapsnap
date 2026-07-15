@@ -9,17 +9,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -321,10 +322,11 @@ fun BottomControls(
                             if (canUndo) {
                                 TextButton(
                                     onClick = onUndo,
+                                    modifier = Modifier.heightIn(min = 48.dp),
                                     colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Undo,
+                                        imageVector = Icons.AutoMirrored.Filled.Undo,
                                         contentDescription = "실행 취소",
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -336,6 +338,7 @@ fun BottomControls(
                         // 가운데: 다시 그리기
                         TextButton(
                             onClick = onDrawToggle,
+                            modifier = Modifier.heightIn(min = 48.dp),
                             colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
                         ) {
                             Text("다시 그리기", fontSize = 13.sp)
@@ -344,6 +347,7 @@ fun BottomControls(
                         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                             TextButton(
                                 onClick = onClear,
+                                modifier = Modifier.heightIn(min = 48.dp),
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.error
                                 )
