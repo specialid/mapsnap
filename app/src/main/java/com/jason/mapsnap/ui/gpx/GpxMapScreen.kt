@@ -20,12 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// ---------- Material 3 컬러: 아웃도어 오렌지 primary, 고대비 우선 ----------
-private val OutdoorOrange = Color(0xFFFF5A36)
-private val OutdoorOrangeDark = Color(0xFFCC4527)
-private val SurfaceDark = Color(0xFF1A1C1E)
-private val OnSurfaceDark = Color(0xFFF5F5F5)
-
 // ---------- 화면 상태 ----------
 enum class DrawTool { NONE, WAYPOINT, PATH, ERASER }
 
@@ -182,7 +176,7 @@ private fun ToolIconButton(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val bgColor = if (selected) OutdoorOrange else Color.Transparent
+    val bgColor = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
     val tintColor = if (selected) Color.White else MaterialTheme.colorScheme.onSurface
 
     IconButton(
@@ -244,8 +238,8 @@ private fun ThumbZoneActions(
         // 핵심 액션: 경로 저장 (Primary FAB)
         FloatingActionButton(
             onClick = onSaveRoute,
-            containerColor = OutdoorOrange,
-            contentColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.size(56.dp),
         ) {
             Icon(
@@ -304,7 +298,7 @@ private fun RouteStatsSheetContent(stats: RouteStats) {
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            // 실제 구현 시 Canvas로 고도 프로필을 OutdoorOrange 선으로 그림
+            // 실제 구현 시 Canvas로 고도 프로필을 MaterialTheme.colorScheme.primary 선으로 그림
             Text(
                 text = "고도 프로필",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -326,7 +320,7 @@ private fun StatItem(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = OutdoorOrange,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(20.dp),
         )
         Spacer(modifier = Modifier.height(4.dp))
@@ -343,30 +337,3 @@ private fun StatItem(
         )
     }
 }
-
-// ---------- Material 3 ColorScheme 정의 ----------
-val GpxLightColorScheme = lightColorScheme(
-    primary = OutdoorOrange,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFDBCF),
-    onPrimaryContainer = Color(0xFF3A0900),
-    secondary = Color(0xFF2E5D50),
-    background = Color(0xFFFFFBFF),
-    surface = Color(0xFFFFFBFF),
-    onSurface = Color(0xFF1A1C1E),
-    surfaceVariant = Color(0xFFEDE0DB),
-    onSurfaceVariant = Color(0xFF52443E),
-)
-
-val GpxDarkColorScheme = darkColorScheme(
-    primary = OutdoorOrange,
-    onPrimary = Color.White,
-    primaryContainer = OutdoorOrangeDark,
-    onPrimaryContainer = Color(0xFFFFDBCF),
-    secondary = Color(0xFFB1CCBE),
-    background = SurfaceDark,
-    surface = SurfaceDark,
-    onSurface = OnSurfaceDark,
-    surfaceVariant = Color(0xFF34302E),
-    onSurfaceVariant = Color(0xFFD7C2BA),
-)
